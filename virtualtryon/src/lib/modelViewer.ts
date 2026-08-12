@@ -41,6 +41,8 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
   renderer.toneMappingExposure = 1;
 
   const scene = new THREE.Scene();
+  // Placeholder bounds/near/far — setInstances() rescales all of these to
+  // fit the actual instance size before the first real frame (see below).
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
   camera.position.z = 10;
 
@@ -140,6 +142,21 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
     },
     setInstances(transforms) {
       setInstanceCount(transforms.length);
+
+      // The camera's distance and near/far were fixed constants tuned for
+      // a model near unit scale. An instance's `size` is a canvas pixel
+      // measurement — routinely in the hundreds — and once the model is
+      // scaled up to it, a fixed camera.position.z of 10 sits *inside* the
+      // model's own volume instead of in front of it, near/far-clipping
+      // most of the geometry away. Keeping the camera distance and near/far
+      // proportional to the largest instance keeps it outside the model at
+      // any size.
+      const maxSize = transforms.reduce((max, t) => Math.max(max, t.size), 0) || 1;
+      camera.position.z = maxSize * 2;
+      camera.near = maxSize * 0.01;
+      camera.far = maxSize * 10;
+      camera.updateProjectionMatrix();
+
       transforms.forEach((t, i) => {
         const group = instances[i];
         group.position.set(t.x - width / 2, -(t.y - height / 2), 0);
