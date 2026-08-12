@@ -74,6 +74,18 @@
   color: var(--color-neutral-100);
 }
 
+.tryon-controls__orient {
+  background: transparent;
+  color: var(--color-neutral-100);
+  width: 26px;
+  height: 26px;
+}
+
+.tryon-controls__orient-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
 @media (max-width: 860px) {
   .tryon-controls {
     left: 12px;
@@ -106,5 +118,10 @@
   .tryon-controls__divider--desktop-only,
   .tryon-controls__close {
     display: none;
+  }
+
+  .tryon-controls__orient {
+    width: 24px;
+    height: 24px;
   }
 }
