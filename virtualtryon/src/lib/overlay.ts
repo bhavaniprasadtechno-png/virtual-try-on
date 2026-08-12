@@ -33,6 +33,8 @@ export interface FaceAnchors {
   /** Near-ear (cheek/tragus) points; earrings anchor on these directly. */
   earA: Point;
   earB: Point;
+  /** Nasion — the bridge of the nose, between the eyebrows. Real glasses rest here, not on the eyes. */
+  nasion: Point;
   chin: Point;
   forehead: Point;
 }
@@ -68,10 +70,11 @@ function offsetAlong(p: Point, dist: number, rotation: number): Point {
 
 /**
  * Computes rotation-aware placement frames straight from face mesh
- * anchors: eyewear centers on the iris midpoint and is sized from the
- * eye-corner span, earrings anchor on the two detected ear points directly
- * (so they track a head turn instead of a fixed symmetric offset), and
- * every placement rolls with head tilt using the eye-line angle.
+ * anchors: eyewear anchors on the nasion (nose bridge), blended toward
+ * pupil height, and is sized from temple width (ear-to-ear), earrings
+ * anchor on the two detected ear points directly (so they track a head
+ * turn instead of a fixed symmetric offset), and every placement rolls
+ * with head tilt using the eye-line angle.
  */
 export function getFacePlacementFrames(
   placement: FacePlacement,
@@ -84,8 +87,18 @@ export function getFacePlacementFrames(
 
   switch (placement) {
     case 'eyes': {
-      const center = midpoint(anchors.irisA, anchors.irisB);
-      return [{ x: center.x, y: center.y, size: eyeSpan * 1.7 * sizeScale, rotation }];
+      // Real glasses rest on the nose bridge (nasion), not the eyes — anchor
+      // there, but blend vertically toward pupil height (mostly pupil, since
+      // that's what the lens optically needs to align with, nudged by
+      // however much the bridge sits above/below it) so an unusually
+      // high/low bridge doesn't push the lenses off the eyes.
+      const irisMid = midpoint(anchors.irisA, anchors.irisB);
+      const x = anchors.nasion.x;
+      const y = irisMid.y + (anchors.nasion.y - irisMid.y) * 0.35;
+      // Sized from temple width (ear-to-ear), not eye span — two faces with
+      // the same eye spacing can still have very different head widths, and
+      // frames need to span the temples, not the pupils.
+      return [{ x, y, size: earSpan * 1.05 * sizeScale, rotation }];
     }
     case 'neck': {
       const faceHeight = distance(anchors.forehead, anchors.chin);
