@@ -20,6 +20,8 @@ export interface CustomModel {
    * Applied in both Preview and Try-On.
    */
   rotationOffsetY: number;
+  /** Same idea for pitch — corrects an upload that renders upside-down. */
+  rotationOffsetX: number;
 }
 
 export interface ModelTint {

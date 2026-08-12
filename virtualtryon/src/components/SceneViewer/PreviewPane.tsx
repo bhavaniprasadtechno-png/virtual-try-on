@@ -21,6 +21,7 @@ export function PreviewPane({ product, colorHex, customModel, onSelectTryOn }: P
             url={customModel.url}
             tintHex={MODEL_TINTS[customModel.tintIndex]?.hex ?? null}
             rotationOffsetY={customModel.rotationOffsetY}
+            rotationOffsetX={customModel.rotationOffsetX}
             className="preview-pane__frame"
           />
         ) : (

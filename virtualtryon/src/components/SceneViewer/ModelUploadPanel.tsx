@@ -20,6 +20,7 @@ interface ModelUploadPanelProps {
   onChangePlacement: (placement: CustomPlacement) => void;
   onChangeTint: (tintIndex: number) => void;
   onRotate: (deltaRadians: number) => void;
+  onFlip: () => void;
 }
 
 /** Upload-your-own-model section of the Customize panel: file picker, tracking target/placement, and tint. */
@@ -31,6 +32,7 @@ export function ModelUploadPanel({
   onChangePlacement,
   onChangeTint,
   onRotate,
+  onFlip,
 }: ModelUploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,7 @@ export function ModelUploadPanel({
         placement: 'eyes',
         tintIndex: 0,
         rotationOffsetY: 0,
+        rotationOffsetX: 0,
       },
       file,
     );
@@ -156,9 +159,9 @@ export function ModelUploadPanel({
           </div>
 
           <div className="model-upload__field">
-            <span className="model-upload__field-label">Facing wrong way?</span>
+            <span className="model-upload__field-label">Orientation looks off?</span>
             <p className="model-upload__hint">
-              An upload's orientation can't be auto-detected — rotate it until it faces forward.
+              An upload's orientation can't be auto-detected — rotate or flip it until it sits right.
             </p>
             <div className="model-upload__rotate-row">
               <button
@@ -178,6 +181,15 @@ export function ModelUploadPanel({
               >
                 <RotateRightIcon />
                 90°
+              </button>
+              <button
+                type="button"
+                className="btn model-upload__rotate"
+                aria-label="Flip model upside down"
+                onClick={onFlip}
+              >
+                <FlipIcon />
+                Flip
               </button>
             </div>
           </div>
@@ -229,6 +241,14 @@ function RotateRightIcon() {
   return (
     <span className="model-upload__rotate-icon" aria-hidden="true">
       ↻
+    </span>
+  );
+}
+
+function FlipIcon() {
+  return (
+    <span className="model-upload__rotate-icon" aria-hidden="true">
+      ⇅
     </span>
   );
 }

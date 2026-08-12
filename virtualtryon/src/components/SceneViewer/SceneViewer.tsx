@@ -14,6 +14,7 @@ const toMeta = (model: CustomModel): StoredModelMeta => ({
   placement: model.placement,
   tintIndex: model.tintIndex,
   rotationOffsetY: model.rotationOffsetY,
+  rotationOffsetX: model.rotationOffsetX,
 });
 
 export function SceneViewer() {
@@ -102,6 +103,9 @@ export function SceneViewer() {
   const handleRotateModel = (deltaRadians: number) =>
     setCustomModel((m) => (m ? { ...m, rotationOffsetY: m.rotationOffsetY + deltaRadians } : m));
 
+  const handleFlipModel = () =>
+    setCustomModel((m) => (m ? { ...m, rotationOffsetX: m.rotationOffsetX + Math.PI } : m));
+
   // Persists target/placement/tint/rotation together, once React has
   // resolved to the final state — avoids the same stale-value hazard that
   // calling saveStoredModelMeta directly in each handler above would have.
@@ -112,7 +116,13 @@ export function SceneViewer() {
     if (!customModel) return;
     saveStoredModelMeta(toMeta(customModel)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customModel?.trackingTarget, customModel?.placement, customModel?.tintIndex, customModel?.rotationOffsetY]);
+  }, [
+    customModel?.trackingTarget,
+    customModel?.placement,
+    customModel?.tintIndex,
+    customModel?.rotationOffsetY,
+    customModel?.rotationOffsetX,
+  ]);
 
   const trackingTarget = customModel ? customModel.trackingTarget : product.trackingTarget;
   const placement = customModel ? customModel.placement : product.placement;
@@ -121,6 +131,7 @@ export function SceneViewer() {
         url: customModel.url,
         tintHex: MODEL_TINTS[customModel.tintIndex]?.hex ?? null,
         rotationOffsetY: customModel.rotationOffsetY,
+        rotationOffsetX: customModel.rotationOffsetX,
       }
     : null;
   // Neutral fallback so the 2D line-art renderer has a color even if a custom
@@ -190,6 +201,7 @@ export function SceneViewer() {
           onChangeModelPlacement={handleChangeModelPlacement}
           onChangeModelTint={handleChangeModelTint}
           onRotateModel={handleRotateModel}
+          onFlipModel={handleFlipModel}
         />
       )}
     </div>

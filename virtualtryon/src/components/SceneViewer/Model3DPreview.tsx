@@ -7,6 +7,8 @@ interface Model3DPreviewProps {
   tintHex: string | null;
   /** User-set correction (radians) for the model's unknown authored orientation. */
   rotationOffsetY: number;
+  /** Same idea for pitch — corrects an upload that renders upside-down. */
+  rotationOffsetX: number;
   className?: string;
 }
 
@@ -21,7 +23,7 @@ const PREVIEW_TILT_X = -0.3;
  * responds to drag, standing in for ProductPreviewArt's line-art when a
  * custom model is active.
  */
-export function Model3DPreview({ url, tintHex, rotationOffsetY, className }: Model3DPreviewProps) {
+export function Model3DPreview({ url, tintHex, rotationOffsetY, rotationOffsetX, className }: Model3DPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const handleRef = useRef<ModelViewerHandle | null>(null);
   const rotationRef = useRef(0);
@@ -30,6 +32,7 @@ export function Model3DPreview({ url, tintHex, rotationOffsetY, className }: Mod
   const rafRef = useRef<number | null>(null);
   const tintRef = useRef(tintHex);
   const rotationOffsetRef = useRef(rotationOffsetY);
+  const rotationOffsetXRef = useRef(rotationOffsetX);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
@@ -39,6 +42,10 @@ export function Model3DPreview({ url, tintHex, rotationOffsetY, className }: Mod
   useEffect(() => {
     rotationOffsetRef.current = rotationOffsetY;
   }, [rotationOffsetY]);
+
+  useEffect(() => {
+    rotationOffsetXRef.current = rotationOffsetX;
+  }, [rotationOffsetX]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -71,7 +78,7 @@ export function Model3DPreview({ url, tintHex, rotationOffsetY, className }: Mod
               x: width / 2,
               y: height / 2,
               size,
-              rotationX: PREVIEW_TILT_X,
+              rotationX: PREVIEW_TILT_X + rotationOffsetXRef.current,
               rotationY: rotationOffsetRef.current + rotationRef.current,
             },
           ]);
