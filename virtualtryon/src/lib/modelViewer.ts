@@ -1,8 +1,8 @@
 /**
  * Thin three.js wrapper for rendering a user-uploaded glTF/GLB model, shared
  * by the Preview-mode viewer and the Try-On tracking overlay. three.js is
- * loaded via dynamic import() — like face-api.js and MediaPipe elsewhere in
- * this app — so its bundle only downloads once a model is actually uploaded.
+ * loaded via dynamic import() — like MediaPipe elsewhere in this app — so
+ * its bundle only downloads once a model is actually uploaded.
  */
 
 export interface InstanceTransform {
@@ -13,6 +13,8 @@ export interface InstanceTransform {
   size: number;
   rotationX?: number;
   rotationY?: number;
+  /** In-plane roll (radians) — matches ctx.rotate()'s screen-space convention, e.g. to track head tilt. */
+  rotationZ?: number;
 }
 
 export interface ModelViewerHandle {
@@ -163,6 +165,11 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
         group.scale.setScalar(t.size);
         group.rotation.x = t.rotationX ?? 0;
         group.rotation.y = t.rotationY ?? 0;
+        // Negated: three.js rotates counter-clockwise for a positive angle
+        // as our camera sees it, while rotationZ is defined to match
+        // ctx.rotate()'s clockwise-positive screen-space convention (see
+        // overlay.ts), so the same angle drives both renderers identically.
+        group.rotation.z = -(t.rotationZ ?? 0);
       });
     },
     resize(w, h) {

@@ -5,10 +5,12 @@ export function drawNecklace(
   cy: number,
   w: number,
   color: string,
+  rotation = 0,
 ): void {
   const drop = w * 0.22;
   ctx.save();
   ctx.translate(cx, cy);
+  ctx.rotate(rotation);
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = Math.max(2, w * 0.02);
@@ -36,9 +38,11 @@ export function drawEarring(
   cy: number,
   size: number,
   color: string,
+  rotation = 0,
 ): void {
   ctx.save();
   ctx.translate(cx, cy);
+  ctx.rotate(rotation);
   ctx.fillStyle = color;
   ctx.strokeStyle = color;
   ctx.lineWidth = Math.max(1.5, size * 0.06);
@@ -66,9 +70,11 @@ export function drawRing(
   cy: number,
   size: number,
   color: string,
+  rotation = 0,
 ): void {
   ctx.save();
   ctx.translate(cx, cy);
+  ctx.rotate(rotation);
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = Math.max(2, size * 0.16);
@@ -91,9 +97,11 @@ export function drawBracelet(
   cy: number,
   size: number,
   color: string,
+  rotation = 0,
 ): void {
   ctx.save();
   ctx.translate(cx, cy);
+  ctx.rotate(rotation);
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = Math.max(3, size * 0.14);

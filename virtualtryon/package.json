@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
-    "face-api.js": "^0.22.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.180.0"

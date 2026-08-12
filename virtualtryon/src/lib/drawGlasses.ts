@@ -10,10 +10,12 @@ export function drawGlasses(
   cy: number,
   w: number,
   color: string,
+  rotation = 0,
 ): void {
   const h = w * 0.4;
   ctx.save();
   ctx.translate(cx, cy);
+  ctx.rotate(rotation);
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = Math.max(3, w * 0.045);
