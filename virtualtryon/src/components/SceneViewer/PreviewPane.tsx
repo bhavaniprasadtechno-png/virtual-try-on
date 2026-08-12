@@ -1,18 +1,30 @@
 import type { Product } from '../../data/products';
+import type { CustomModel } from '../../data/customModel';
+import { MODEL_TINTS } from '../../data/customModel';
 import { ProductPreviewArt } from './ProductPreviewArt';
+import { Model3DPreview } from './Model3DPreview';
 import './PreviewPane.css';
 
 interface PreviewPaneProps {
   product: Product;
   colorHex: string;
+  customModel: CustomModel | null;
   onSelectTryOn: () => void;
 }
 
-export function PreviewPane({ product, colorHex, onSelectTryOn }: PreviewPaneProps) {
+export function PreviewPane({ product, colorHex, customModel, onSelectTryOn }: PreviewPaneProps) {
   return (
     <>
       <div className="preview-pane__stage">
-        <ProductPreviewArt product={product} colorHex={colorHex} className="preview-pane__frame" />
+        {customModel ? (
+          <Model3DPreview
+            url={customModel.url}
+            tintHex={MODEL_TINTS[customModel.tintIndex]?.hex ?? null}
+            className="preview-pane__frame"
+          />
+        ) : (
+          <ProductPreviewArt product={product} colorHex={colorHex} className="preview-pane__frame" />
+        )}
       </div>
 
       <div className="preview-pane__tools">
