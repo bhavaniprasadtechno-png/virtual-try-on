@@ -20,6 +20,8 @@ interface CustomModelOverlay {
   tintHex: string | null;
   /** User-set correction (radians) for the model's unknown authored orientation. */
   rotationOffsetY: number;
+  /** Same idea for pitch — corrects an upload that renders upside-down. */
+  rotationOffsetX: number;
 }
 
 interface UseTryOnOptions {
@@ -134,6 +136,7 @@ export function useTryOn({
   const customModelUrl = customModel?.url ?? null;
   const customModelTintRef = useRef(customModel?.tintHex ?? null);
   const customModelRotationRef = useRef(customModel?.rotationOffsetY ?? 0);
+  const customModelRotationXRef = useRef(customModel?.rotationOffsetX ?? 0);
 
   useEffect(() => {
     customModelTintRef.current = customModel?.tintHex ?? null;
@@ -143,6 +146,10 @@ export function useTryOn({
   useEffect(() => {
     customModelRotationRef.current = customModel?.rotationOffsetY ?? 0;
   }, [customModel?.rotationOffsetY]);
+
+  useEffect(() => {
+    customModelRotationXRef.current = customModel?.rotationOffsetX ?? 0;
+  }, [customModel?.rotationOffsetX]);
 
   // Load/dispose the WebGL overlay for the uploaded model as its URL changes.
   // Reads the tint from a ref (rather than depending on it directly) so a
@@ -238,7 +245,14 @@ export function useTryOn({
         modelViewerSizeRef.current = { width: canvas.width, height: canvas.height };
       }
       handle.setInstances(
-        frames.map((f) => ({ x: f.x, y: f.y, size: f.size, rotationZ: f.rotation, rotationY: customModelRotationRef.current })),
+        frames.map((f) => ({
+          x: f.x,
+          y: f.y,
+          size: f.size,
+          rotationZ: f.rotation,
+          rotationY: customModelRotationRef.current,
+          rotationX: customModelRotationXRef.current,
+        })),
       );
       handle.render();
     };

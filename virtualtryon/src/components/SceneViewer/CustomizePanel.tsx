@@ -25,6 +25,7 @@ interface CustomizePanelProps {
   onChangeModelPlacement: (placement: CustomPlacement) => void;
   onChangeModelTint: (tintIndex: number) => void;
   onRotateModel: (deltaRadians: number) => void;
+  onFlipModel: () => void;
 }
 
 /**
@@ -49,6 +50,7 @@ export function CustomizePanel({
   onChangeModelPlacement,
   onChangeModelTint,
   onRotateModel,
+  onFlipModel,
 }: CustomizePanelProps) {
   const [frameOpen, setFrameOpen] = useState(true);
   const [sizeOpen, setSizeOpen] = useState(true);
@@ -133,6 +135,7 @@ export function CustomizePanel({
                 onChangePlacement={onChangeModelPlacement}
                 onChangeTint={onChangeModelTint}
                 onRotate={onRotateModel}
+                onFlip={onFlipModel}
               />
             </div>
           )}
