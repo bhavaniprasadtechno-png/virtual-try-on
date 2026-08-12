@@ -15,6 +15,8 @@ import { getReadyHandLandmarker, loadHandModel } from './useHandModel';
 interface CustomModelOverlay {
   url: string;
   tintHex: string | null;
+  /** User-set correction (radians) for the model's unknown authored orientation. */
+  rotationOffsetY: number;
 }
 
 interface UseTryOnOptions {
@@ -112,11 +114,16 @@ export function useTryOn({
 
   const customModelUrl = customModel?.url ?? null;
   const customModelTintRef = useRef(customModel?.tintHex ?? null);
+  const customModelRotationRef = useRef(customModel?.rotationOffsetY ?? 0);
 
   useEffect(() => {
     customModelTintRef.current = customModel?.tintHex ?? null;
     modelViewerRef.current?.setTint(customModelTintRef.current);
   }, [customModel?.tintHex]);
+
+  useEffect(() => {
+    customModelRotationRef.current = customModel?.rotationOffsetY ?? 0;
+  }, [customModel?.rotationOffsetY]);
 
   // Load/dispose the WebGL overlay for the uploaded model as its URL changes.
   // Reads the tint from a ref (rather than depending on it directly) so a
@@ -220,7 +227,7 @@ export function useTryOn({
         handle.resize(canvas.width, canvas.height);
         modelViewerSizeRef.current = { width: canvas.width, height: canvas.height };
       }
-      handle.setInstances(frames);
+      handle.setInstances(frames.map((f) => ({ ...f, rotationY: customModelRotationRef.current })));
       handle.render();
     };
 

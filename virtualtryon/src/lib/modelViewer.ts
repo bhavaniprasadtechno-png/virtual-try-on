@@ -11,6 +11,7 @@ export interface InstanceTransform {
   y: number;
   /** On-screen width of the model's longest dimension, in canvas pixels. */
   size: number;
+  rotationX?: number;
   rotationY?: number;
 }
 
@@ -80,6 +81,11 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
     const mesh = obj as import('three').Mesh;
     if (!(mesh as { isMesh?: boolean }).isMesh) return;
     const trackColorable = (material: import('three').Material) => {
+      // Uploaded assets vary wildly in quality — inconsistent face winding
+      // or inverted normals are common, especially on anything converted
+      // from another format. Rendering both sides means a bad winding
+      // makes a face look flat-shaded at worst, never invisible.
+      material.side = THREE.DoubleSide;
       const colorable = material as import('three').MeshStandardMaterial;
       materials.push(material);
       baseColors.push(colorable.color ? colorable.color.clone() : null);
@@ -138,6 +144,7 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
         const group = instances[i];
         group.position.set(t.x - width / 2, -(t.y - height / 2), 0);
         group.scale.setScalar(t.size);
+        group.rotation.x = t.rotationX ?? 0;
         group.rotation.y = t.rotationY ?? 0;
       });
     },

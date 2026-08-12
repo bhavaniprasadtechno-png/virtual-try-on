@@ -19,11 +19,12 @@ interface CustomizePanelProps {
   onSelectColor: (index: number) => void;
   onSelectSize: (index: number) => void;
   customModel: CustomModel | null;
-  onUploadModel: (model: CustomModel) => void;
+  onUploadModel: (model: CustomModel, file: File) => void;
   onRemoveModel: () => void;
   onChangeModelTarget: (target: CustomTrackingTarget) => void;
   onChangeModelPlacement: (placement: CustomPlacement) => void;
   onChangeModelTint: (tintIndex: number) => void;
+  onRotateModel: (deltaRadians: number) => void;
 }
 
 /**
@@ -47,6 +48,7 @@ export function CustomizePanel({
   onChangeModelTarget,
   onChangeModelPlacement,
   onChangeModelTint,
+  onRotateModel,
 }: CustomizePanelProps) {
   const [frameOpen, setFrameOpen] = useState(true);
   const [sizeOpen, setSizeOpen] = useState(true);
@@ -130,6 +132,7 @@ export function CustomizePanel({
                 onChangeTarget={onChangeModelTarget}
                 onChangePlacement={onChangeModelPlacement}
                 onChangeTint={onChangeModelTint}
+                onRotate={onRotateModel}
               />
             </div>
           )}

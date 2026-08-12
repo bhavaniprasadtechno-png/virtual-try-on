@@ -5,15 +5,23 @@ import './Model3DPreview.css';
 interface Model3DPreviewProps {
   url: string;
   tintHex: string | null;
+  /** User-set correction (radians) for the model's unknown authored orientation. */
+  rotationOffsetY: number;
   className?: string;
 }
+
+// A fixed downward camera tilt so the preview is always a 3/4 "product
+// shot" angle. With a pure top-down/front-on orthographic view, a flat
+// object (glasses, a pendant) can spin edge-on and all but disappear at
+// certain points in the auto-rotate cycle; the tilt makes that impossible.
+const PREVIEW_TILT_X = -0.3;
 
 /**
  * Static-scene viewer for an uploaded 3D model: auto-rotates slowly and
  * responds to drag, standing in for ProductPreviewArt's line-art when a
  * custom model is active.
  */
-export function Model3DPreview({ url, tintHex, className }: Model3DPreviewProps) {
+export function Model3DPreview({ url, tintHex, rotationOffsetY, className }: Model3DPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const handleRef = useRef<ModelViewerHandle | null>(null);
   const rotationRef = useRef(0);
@@ -21,11 +29,16 @@ export function Model3DPreview({ url, tintHex, className }: Model3DPreviewProps)
   const lastPointerXRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const tintRef = useRef(tintHex);
+  const rotationOffsetRef = useRef(rotationOffsetY);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     tintRef.current = tintHex;
   }, [tintHex]);
+
+  useEffect(() => {
+    rotationOffsetRef.current = rotationOffsetY;
+  }, [rotationOffsetY]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -53,7 +66,15 @@ export function Model3DPreview({ url, tintHex, className }: Model3DPreviewProps)
           handle.resize(width, height);
           if (!draggingRef.current) rotationRef.current += 0.006;
           const size = Math.min(width, height) * 0.62;
-          handle.setInstances([{ x: width / 2, y: height / 2, size, rotationY: rotationRef.current }]);
+          handle.setInstances([
+            {
+              x: width / 2,
+              y: height / 2,
+              size,
+              rotationX: PREVIEW_TILT_X,
+              rotationY: rotationOffsetRef.current + rotationRef.current,
+            },
+          ]);
           handle.render();
           rafRef.current = requestAnimationFrame(loop);
         };

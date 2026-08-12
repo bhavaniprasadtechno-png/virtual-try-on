@@ -13,6 +13,13 @@ export interface CustomModel {
   placement: CustomPlacement;
   /** Index into MODEL_TINTS. */
   tintIndex: number;
+  /**
+   * Manual correction (radians) for the model's authored "front" axis, since
+   * that can't be reliably auto-detected from geometry alone — an upload
+   * that faces sideways or backwards needs the user to straighten it once.
+   * Applied in both Preview and Try-On.
+   */
+  rotationOffsetY: number;
 }
 
 export interface ModelTint {
