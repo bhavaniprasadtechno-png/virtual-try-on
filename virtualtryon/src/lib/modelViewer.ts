@@ -27,22 +27,34 @@ export interface ModelViewerHandle {
 export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): Promise<ModelViewerHandle> {
   const THREE = await import('three');
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
+  const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js');
 
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // Without tone mapping, a shiny/metallic PBR material (common for glasses
+  // frames and jewelry) can clip straight to solid white wherever a flat
+  // face catches a direct specular highlight — ACES compresses that instead
+  // of clipping it, so highlights read as bright, not as a blown-out patch.
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1;
 
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
   camera.position.z = 10;
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3a46, 1.2));
-  const key = new THREE.DirectionalLight(0xffffff, 1.1);
+  // A soft procedural environment gives PBR materials realistic ambient
+  // reflections instead of relying on a couple of hard directional lights,
+  // which is what produces that harsh single-spot highlight in the first
+  // place.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environment = envTexture;
+  pmrem.dispose();
+
+  const key = new THREE.DirectionalLight(0xffffff, 0.6);
   key.position.set(2, 3, 5);
   scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 0.45);
-  fill.position.set(-3, -1, 4);
-  scene.add(fill);
 
   const gltf = await new GLTFLoader().loadAsync(url);
   const template = gltf.scene;
@@ -58,17 +70,31 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
   const maxDim = Math.max(dimensions.x, dimensions.y, dimensions.z) || 1;
   template.position.sub(center);
 
+  // Clone every material slot (meshes commonly carry more than one, e.g. a
+  // separate frame vs. lens material) so tinting doesn't mutate materials
+  // shared elsewhere, and so a multi-material mesh keeps all of its slots
+  // instead of collapsing onto just the first one.
   const materials: import('three').Material[] = [];
   const baseColors: (import('three').Color | null)[] = [];
   template.traverse((obj) => {
     const mesh = obj as import('three').Mesh;
     if (!(mesh as { isMesh?: boolean }).isMesh) return;
-    const original = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-    const cloned = original.clone();
-    mesh.material = cloned;
-    materials.push(cloned);
-    const colorable = cloned as import('three').MeshStandardMaterial;
-    baseColors.push(colorable.color ? colorable.color.clone() : null);
+    const trackColorable = (material: import('three').Material) => {
+      const colorable = material as import('three').MeshStandardMaterial;
+      materials.push(material);
+      baseColors.push(colorable.color ? colorable.color.clone() : null);
+    };
+    if (Array.isArray(mesh.material)) {
+      mesh.material = mesh.material.map((m) => {
+        const cloned = m.clone();
+        trackColorable(cloned);
+        return cloned;
+      });
+    } else {
+      const cloned = mesh.material.clone();
+      mesh.material = cloned;
+      trackColorable(cloned);
+    }
   });
 
   const normalized = new THREE.Group();
@@ -131,6 +157,7 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
     dispose() {
       instances.forEach((g) => scene.remove(g));
       materials.forEach((m) => m.dispose());
+      envTexture.dispose();
       renderer.dispose();
     },
   };
