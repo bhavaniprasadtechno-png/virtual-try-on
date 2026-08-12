@@ -7,7 +7,7 @@ interface TryOnPaneProps {
   placement: Placement;
   colorHex: string;
   sizeScale: number;
-  customModel: { url: string; tintHex: string | null } | null;
+  customModel: { url: string; tintHex: string | null; rotationOffsetY: number } | null;
   onClose: () => void;
 }
 

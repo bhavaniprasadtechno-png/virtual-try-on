@@ -14,11 +14,12 @@ import './ModelUploadPanel.css';
 
 interface ModelUploadPanelProps {
   customModel: CustomModel | null;
-  onUpload: (model: CustomModel) => void;
+  onUpload: (model: CustomModel, file: File) => void;
   onRemove: () => void;
   onChangeTarget: (target: CustomTrackingTarget) => void;
   onChangePlacement: (placement: CustomPlacement) => void;
   onChangeTint: (tintIndex: number) => void;
+  onRotate: (deltaRadians: number) => void;
 }
 
 /** Upload-your-own-model section of the Customize panel: file picker, tracking target/placement, and tint. */
@@ -29,6 +30,7 @@ export function ModelUploadPanel({
   onChangeTarget,
   onChangePlacement,
   onChangeTint,
+  onRotate,
 }: ModelUploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,14 +47,18 @@ export function ModelUploadPanel({
       return;
     }
     setError(null);
-    onUpload({
-      id: `custom-${Date.now()}`,
-      name: file.name,
-      url: URL.createObjectURL(file),
-      trackingTarget: 'face',
-      placement: 'eyes',
-      tintIndex: 0,
-    });
+    onUpload(
+      {
+        id: `custom-${Date.now()}`,
+        name: file.name,
+        url: URL.createObjectURL(file),
+        trackingTarget: 'face',
+        placement: 'eyes',
+        tintIndex: 0,
+        rotationOffsetY: 0,
+      },
+      file,
+    );
   };
 
   const placements = customModel?.trackingTarget === 'hand' ? HAND_PLACEMENTS : FACE_PLACEMENTS;
@@ -149,6 +155,33 @@ export function ModelUploadPanel({
             </div>
           </div>
 
+          <div className="model-upload__field">
+            <span className="model-upload__field-label">Facing wrong way?</span>
+            <p className="model-upload__hint">
+              An upload's orientation can't be auto-detected — rotate it until it faces forward.
+            </p>
+            <div className="model-upload__rotate-row">
+              <button
+                type="button"
+                className="btn model-upload__rotate"
+                aria-label="Rotate model left 90 degrees"
+                onClick={() => onRotate(-Math.PI / 2)}
+              >
+                <RotateLeftIcon />
+                90°
+              </button>
+              <button
+                type="button"
+                className="btn model-upload__rotate"
+                aria-label="Rotate model right 90 degrees"
+                onClick={() => onRotate(Math.PI / 2)}
+              >
+                <RotateRightIcon />
+                90°
+              </button>
+            </div>
+          </div>
+
           <button type="button" className="btn model-upload__replace" onClick={() => inputRef.current?.click()}>
             Replace model
           </button>
@@ -181,5 +214,21 @@ function CloseIcon() {
     <svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
       <path d="M205.66 194.34a8 8 0 0 1-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 0 1-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0 1 11.32-11.32L128 116.69l66.34-66.35a8 8 0 0 1 11.32 11.32L139.31 128z" />
     </svg>
+  );
+}
+
+function RotateLeftIcon() {
+  return (
+    <span className="model-upload__rotate-icon" aria-hidden="true">
+      ↺
+    </span>
+  );
+}
+
+function RotateRightIcon() {
+  return (
+    <span className="model-upload__rotate-icon" aria-hidden="true">
+      ↻
+    </span>
   );
 }

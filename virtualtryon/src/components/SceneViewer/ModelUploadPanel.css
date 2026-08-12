@@ -121,6 +121,29 @@
   padding: 6px 12px;
 }
 
+.model-upload__hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-neutral-400);
+}
+
+.model-upload__rotate-row {
+  display: flex;
+  gap: 8px;
+}
+
+.model-upload__rotate {
+  flex: 1;
+  font-size: 12px;
+  padding: 7px 0;
+}
+
+.model-upload__rotate-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
 .model-upload__error {
   margin-top: var(--space-2);
   font-size: 12px;
