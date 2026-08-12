@@ -1,0 +1,33 @@
+.scene-viewer {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-6);
+  display: flex;
+  gap: var(--space-4);
+}
+
+.scene-viewer__stage {
+  flex: 1;
+  background: var(--color-neutral-200);
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 860px) {
+  .scene-viewer {
+    padding: 0;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    gap: 0;
+  }
+
+  .scene-viewer__stage {
+    border-radius: 0;
+    flex: 1;
+    min-height: 0;
+  }
+}

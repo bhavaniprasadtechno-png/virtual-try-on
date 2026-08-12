@@ -1,0 +1,32 @@
+.seg-control {
+  display: flex;
+  gap: 2px;
+  background: var(--color-neutral-900);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  flex: 1;
+}
+
+.seg-control__opt {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 7px 10px;
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--color-neutral-300);
+  cursor: pointer;
+}
+
+.seg-control__opt--active {
+  background: var(--color-accent);
+  color: var(--color-neutral-100);
+}
+
+.seg-control__opt input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}

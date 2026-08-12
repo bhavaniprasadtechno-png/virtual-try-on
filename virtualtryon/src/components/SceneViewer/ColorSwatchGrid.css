@@ -1,0 +1,50 @@
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.swatch-grid__item {
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  outline: none;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+}
+
+.swatch-grid__item--active {
+  outline: 2px solid var(--color-accent);
+}
+
+.swatch-grid__item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.swatch-grid__swatch {
+  display: block;
+  height: 52px;
+}
+
+.swatch-grid__label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-neutral-100);
+  background: rgba(0, 0, 0, 0.55);
+  padding: 3px 5px;
+}
+
+@media (max-width: 860px) {
+  .swatch-grid__swatch {
+    height: 40px;
+  }
+
+  .swatch-grid__label {
+    font-size: 9px;
+    padding: 3px;
+  }
+}

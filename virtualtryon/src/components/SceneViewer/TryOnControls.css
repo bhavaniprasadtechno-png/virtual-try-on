@@ -1,0 +1,110 @@
+.tryon-controls {
+  position: absolute;
+  bottom: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: color-mix(in srgb, var(--color-neutral-900) 72%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--color-divider);
+  border-radius: 999px;
+  padding: 8px 10px 8px 14px;
+  box-shadow: var(--shadow-md);
+  max-width: calc(100% - 2 * var(--space-4));
+}
+
+.tryon-controls__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tryon-controls__group-label {
+  font-size: 11px;
+  color: var(--color-neutral-300);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex: none;
+}
+
+.tryon-controls__swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  flex: none;
+  box-shadow: none;
+}
+
+.tryon-controls__swatch--active {
+  box-shadow:
+    0 0 0 2px var(--color-bg),
+    0 0 0 4px var(--color-accent);
+}
+
+.tryon-controls__size {
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-neutral-300);
+}
+
+.tryon-controls__size--active {
+  background: var(--color-accent);
+  color: var(--color-neutral-100);
+}
+
+.tryon-controls__divider {
+  width: 1px;
+  height: 22px;
+  background: var(--color-divider);
+  margin: 0 4px;
+  flex: none;
+}
+
+.tryon-controls__close {
+  background: transparent;
+  color: var(--color-neutral-100);
+}
+
+@media (max-width: 860px) {
+  .tryon-controls {
+    left: 12px;
+    right: 12px;
+    bottom: 14px;
+    transform: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    border-radius: 16px;
+    padding: 10px 12px;
+    max-width: none;
+  }
+
+  .tryon-controls__group-label {
+    width: 36px;
+  }
+
+  .tryon-controls__swatch {
+    width: 24px;
+    height: 24px;
+  }
+
+  .tryon-controls__size {
+    flex: 1;
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  .tryon-controls__divider--desktop-only,
+  .tryon-controls__close {
+    display: none;
+  }
+}

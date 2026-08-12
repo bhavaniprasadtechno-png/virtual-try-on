@@ -1,0 +1,57 @@
+:root {
+  /* Core surfaces */
+  --color-bg: #161826;
+  --color-surface: #232532;
+  --color-text: #e9e9ed;
+  --color-divider: #33364a;
+
+  /* Accent ramp */
+  --color-accent-100: #f1eefb;
+  --color-accent-200: #d9d2f3;
+  --color-accent-300: #c1b6ea;
+  --color-accent-400: #a99ae2;
+  --color-accent: #9184d9;
+  --color-accent-600: #7a6dc4;
+  --color-accent-700: #635aa0;
+  --color-accent-800: #4a457a;
+  --color-accent-900: #322f54;
+
+  /* Neutral ramp (100 = lightest, used for light preview canvas; 900 = darkest chrome) */
+  --color-neutral-100: #f3f5fe;
+  --color-neutral-200: #e4e6f0;
+  --color-neutral-300: #c9cbd9;
+  --color-neutral-400: #9d9fae;
+  --color-neutral-500: #767886;
+  --color-neutral-600: #5b5d69;
+  --color-neutral-700: #45465250;
+  --color-neutral-700-solid: #454652;
+  --color-neutral-800: #35363f;
+  --color-neutral-900: #292b31;
+
+  /* Frame product colors (data, not theme) */
+  --frame-brown-mix: #7a4a1f;
+  --frame-forest-green: #1f5c3d;
+  --frame-navy-blue: #17335c;
+  --frame-magenta: #a92d7a;
+
+  /* Type */
+  --font-heading: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  /* Shadows (tuned for dark ground: hairline edge + ambient darkness) */
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 8px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 16px 40px rgba(0, 0, 0, 0.45);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+}

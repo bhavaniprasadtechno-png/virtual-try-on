@@ -1,0 +1,57 @@
+.preview-pane__stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-pane__frame {
+  width: 60%;
+  max-width: 520px;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.25));
+}
+
+.preview-pane__tools {
+  position: absolute;
+  left: var(--space-4);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-pane__tool {
+  background: var(--color-neutral-900);
+  color: var(--color-neutral-100);
+  border: none;
+}
+
+@media (max-width: 860px) {
+  .preview-pane__frame {
+    width: 78%;
+    filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.25));
+  }
+
+  .preview-pane__tools {
+    left: auto;
+    right: 12px;
+    top: auto;
+    bottom: 12px;
+    transform: none;
+  }
+
+  .preview-pane__tool {
+    width: 32px;
+    height: 32px;
+  }
+
+  .preview-pane__tool svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .preview-pane__tool--camera {
+    display: none;
+  }
+}
