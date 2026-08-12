@@ -1,24 +1,45 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import type { Product } from '../data/products';
-import { drawFacePlacement, drawHandPlacement, type FacePlacement, type HandPlacement } from '../lib/overlay';
+import type { Placement, TrackingTarget } from '../data/products';
+import {
+  drawFacePlacement,
+  drawHandPlacement,
+  getFacePlacementFrames,
+  getHandPlacementFrame,
+  type FacePlacement,
+  type HandPlacement,
+} from '../lib/overlay';
+import { loadModelViewer, type ModelViewerHandle } from '../lib/modelViewer';
 import { getReadyFaceApi, loadFaceModels } from './useFaceModels';
 import { getReadyHandLandmarker, loadHandModel } from './useHandModel';
+
+interface CustomModelOverlay {
+  url: string;
+  tintHex: string | null;
+}
 
 interface UseTryOnOptions {
   /** Whether Try-On mode is currently active; toggling this starts/stops the camera. */
   active: boolean;
-  product: Product;
+  trackingTarget: TrackingTarget;
+  placement: Placement;
   colorHex: string;
   sizeScale: number;
+  /** When set, a user-uploaded 3D model is tracked instead of the 2D line-art overlay. */
+  customModel?: CustomModelOverlay | null;
 }
 
 interface UseTryOnResult {
   videoRef: RefObject<HTMLVideoElement>;
+  /** 2D line-art overlay canvas; used when no custom model is active. */
   canvasRef: RefObject<HTMLCanvasElement>;
+  /** WebGL overlay canvas for a tracked custom 3D model; layered on top of canvasRef. */
+  modelCanvasRef: RefObject<HTMLCanvasElement>;
   /** True once camera access failed/was denied and the fallback feed is showing. */
   demoMode: boolean;
   /** True once the tracking model has finished loading (or the demo fallback is live). */
   trackingReady: boolean;
+  /** Set if a custom model was requested but failed to load. */
+  modelError: boolean;
 }
 
 interface FaceAnchor {
@@ -46,20 +67,36 @@ interface HandAnchor {
  * (tens of ms on a fast GPU, several hundred on a slow/software-rendered
  * one) — coupling redraw to detection would make the overlay flicker
  * blank on slower devices instead of just updating position less often.
+ *
+ * When `customModel` is set, the same per-frame anchor drives a WebGL
+ * overlay (see lib/modelViewer.ts) instead of the 2D line-art routines, so
+ * an uploaded glTF/GLB model tracks the face/hand exactly like a catalog
+ * product would.
  */
-export function useTryOn({ active, product, colorHex, sizeScale }: UseTryOnOptions): UseTryOnResult {
+export function useTryOn({
+  active,
+  trackingTarget,
+  placement,
+  colorHex,
+  sizeScale,
+  customModel,
+}: UseTryOnOptions): UseTryOnResult {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const modelCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const colorRef = useRef(colorHex);
   const sizeRef = useRef(sizeScale);
-  const placementRef = useRef(product.placement);
+  const placementRef = useRef(placement);
   const faceAnchorRef = useRef<FaceAnchor | null>(null);
   const handAnchorRef = useRef<HandAnchor | null>(null);
+  const modelViewerRef = useRef<ModelViewerHandle | null>(null);
+  const modelViewerSizeRef = useRef({ width: 0, height: 0 });
 
   const [demoMode, setDemoMode] = useState(false);
   const [trackingReady, setTrackingReady] = useState(false);
+  const [modelError, setModelError] = useState(false);
 
   useEffect(() => {
     colorRef.current = colorHex;
@@ -70,10 +107,48 @@ export function useTryOn({ active, product, colorHex, sizeScale }: UseTryOnOptio
   }, [sizeScale]);
 
   useEffect(() => {
-    placementRef.current = product.placement;
-  }, [product.placement]);
+    placementRef.current = placement;
+  }, [placement]);
 
-  const trackingTarget = product.trackingTarget;
+  const customModelUrl = customModel?.url ?? null;
+  const customModelTintRef = useRef(customModel?.tintHex ?? null);
+
+  useEffect(() => {
+    customModelTintRef.current = customModel?.tintHex ?? null;
+    modelViewerRef.current?.setTint(customModelTintRef.current);
+  }, [customModel?.tintHex]);
+
+  // Load/dispose the WebGL overlay for the uploaded model as its URL changes.
+  // Reads the tint from a ref (rather than depending on it directly) so a
+  // tint change alone doesn't tear down and reload the whole GLTF.
+  useEffect(() => {
+    modelViewerRef.current?.dispose();
+    modelViewerRef.current = null;
+    modelViewerSizeRef.current = { width: 0, height: 0 };
+    setModelError(false);
+
+    if (!customModelUrl) return;
+    const canvas = modelCanvasRef.current;
+    if (!canvas) return;
+
+    let cancelled = false;
+    loadModelViewer(canvas, customModelUrl)
+      .then((handle) => {
+        if (cancelled) {
+          handle.dispose();
+          return;
+        }
+        handle.setTint(customModelTintRef.current);
+        modelViewerRef.current = handle;
+      })
+      .catch(() => {
+        if (!cancelled) setModelError(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customModelUrl]);
 
   useEffect(() => {
     if (!active) return;
@@ -138,6 +213,17 @@ export function useTryOn({ active, product, colorHex, sizeScale }: UseTryOnOptio
       }
     };
 
+    const renderModelOverlay = (canvas: HTMLCanvasElement, frames: { x: number; y: number; size: number }[]) => {
+      const handle = modelViewerRef.current;
+      if (!handle) return;
+      if (modelViewerSizeRef.current.width !== canvas.width || modelViewerSizeRef.current.height !== canvas.height) {
+        handle.resize(canvas.width, canvas.height);
+        modelViewerSizeRef.current = { width: canvas.width, height: canvas.height };
+      }
+      handle.setInstances(frames);
+      handle.render();
+    };
+
     const runFaceRenderLoop = () => {
       const canvas = canvasRef.current;
       const video = videoRef.current;
@@ -146,15 +232,40 @@ export function useTryOn({ active, product, colorHex, sizeScale }: UseTryOnOptio
       if (video.videoWidth) {
         canvas.width = video.clientWidth;
         canvas.height = video.clientHeight;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          const anchor = faceAnchorRef.current;
-          const eyeCx = anchor?.cx ?? canvas.width / 2;
-          const eyeCy = anchor?.cy ?? canvas.height * 0.42;
-          const faceW = anchor?.faceW ?? canvas.width * 0.32;
-          const faceH = anchor?.faceH ?? faceW * 0.9;
-          drawFacePlacement(ctx, placementRef.current as FacePlacement, eyeCx, eyeCy, faceW, faceH, sizeRef.current, colorRef.current);
+        const anchor = faceAnchorRef.current;
+        const eyeCx = anchor?.cx ?? canvas.width / 2;
+        const eyeCy = anchor?.cy ?? canvas.height * 0.42;
+        const faceW = anchor?.faceW ?? canvas.width * 0.32;
+        const faceH = anchor?.faceH ?? faceW * 0.9;
+
+        if (modelViewerRef.current && modelCanvasRef.current) {
+          const modelCanvas = modelCanvasRef.current;
+          modelCanvas.width = canvas.width;
+          modelCanvas.height = canvas.height;
+          const frames = getFacePlacementFrames(
+            placementRef.current as FacePlacement,
+            eyeCx,
+            eyeCy,
+            faceW,
+            faceH,
+            sizeRef.current,
+          );
+          renderModelOverlay(modelCanvas, frames);
+        } else {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawFacePlacement(
+              ctx,
+              placementRef.current as FacePlacement,
+              eyeCx,
+              eyeCy,
+              faceW,
+              faceH,
+              sizeRef.current,
+              colorRef.current,
+            );
+          }
         }
 
         if (!detecting) {
@@ -176,14 +287,23 @@ export function useTryOn({ active, product, colorHex, sizeScale }: UseTryOnOptio
       if (video.videoWidth) {
         canvas.width = video.clientWidth;
         canvas.height = video.clientHeight;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          const anchor = handAnchorRef.current;
-          const cx = anchor?.cx ?? canvas.width / 2;
-          const cy = anchor?.cy ?? canvas.height * 0.55;
-          const handSize = anchor?.handSize ?? canvas.width * 0.3;
-          drawHandPlacement(ctx, placementRef.current as HandPlacement, cx, cy, handSize, sizeRef.current, colorRef.current);
+        const anchor = handAnchorRef.current;
+        const cx = anchor?.cx ?? canvas.width / 2;
+        const cy = anchor?.cy ?? canvas.height * 0.55;
+        const handSize = anchor?.handSize ?? canvas.width * 0.3;
+
+        if (modelViewerRef.current && modelCanvasRef.current) {
+          const modelCanvas = modelCanvasRef.current;
+          modelCanvas.width = canvas.width;
+          modelCanvas.height = canvas.height;
+          const frame = getHandPlacementFrame(placementRef.current as HandPlacement, cx, cy, handSize, sizeRef.current);
+          renderModelOverlay(modelCanvas, [frame]);
+        } else {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawHandPlacement(ctx, placementRef.current as HandPlacement, cx, cy, handSize, sizeRef.current, colorRef.current);
+          }
         }
 
         if (!detecting) {
@@ -200,18 +320,45 @@ export function useTryOn({ active, product, colorHex, sizeScale }: UseTryOnOptio
     const runFaceDemoLoop = () => {
       const canvas = canvasRef.current;
       const parent = canvas?.parentElement;
-      const ctx = canvas?.getContext('2d');
-      if (!canvas || !parent || !ctx) return;
+      if (!canvas || !parent) return;
       canvas.width = parent.clientWidth;
       canvas.height = parent.clientHeight;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const t = performance.now() / 1000;
       const eyeCx = canvas.width / 2 + Math.sin(t * 0.6) * 6;
       const eyeCy = canvas.height * 0.2 + Math.cos(t * 0.5) * 4;
       const faceW = canvas.width * 0.19;
       const faceH = faceW * 0.9;
-      drawFacePlacement(ctx, placementRef.current as FacePlacement, eyeCx, eyeCy, faceW, faceH, sizeRef.current, colorRef.current);
+
+      if (modelViewerRef.current && modelCanvasRef.current) {
+        const modelCanvas = modelCanvasRef.current;
+        modelCanvas.width = canvas.width;
+        modelCanvas.height = canvas.height;
+        const frames = getFacePlacementFrames(
+          placementRef.current as FacePlacement,
+          eyeCx,
+          eyeCy,
+          faceW,
+          faceH,
+          sizeRef.current,
+        );
+        renderModelOverlay(modelCanvas, frames);
+      } else {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          drawFacePlacement(
+            ctx,
+            placementRef.current as FacePlacement,
+            eyeCx,
+            eyeCy,
+            faceW,
+            faceH,
+            sizeRef.current,
+            colorRef.current,
+          );
+        }
+      }
 
       rafRef.current = requestAnimationFrame(runFaceDemoLoop);
     };
@@ -219,17 +366,28 @@ export function useTryOn({ active, product, colorHex, sizeScale }: UseTryOnOptio
     const runHandDemoLoop = () => {
       const canvas = canvasRef.current;
       const parent = canvas?.parentElement;
-      const ctx = canvas?.getContext('2d');
-      if (!canvas || !parent || !ctx) return;
+      if (!canvas || !parent) return;
       canvas.width = parent.clientWidth;
       canvas.height = parent.clientHeight;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const t = performance.now() / 1000;
       const cx = canvas.width / 2 + Math.sin(t * 0.5) * 8;
       const cy = canvas.height * 0.58 + Math.cos(t * 0.4) * 6;
       const handSize = canvas.width * 0.3;
-      drawHandPlacement(ctx, placementRef.current as HandPlacement, cx, cy, handSize, sizeRef.current, colorRef.current);
+
+      if (modelViewerRef.current && modelCanvasRef.current) {
+        const modelCanvas = modelCanvasRef.current;
+        modelCanvas.width = canvas.width;
+        modelCanvas.height = canvas.height;
+        const frame = getHandPlacementFrame(placementRef.current as HandPlacement, cx, cy, handSize, sizeRef.current);
+        renderModelOverlay(modelCanvas, [frame]);
+      } else {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          drawHandPlacement(ctx, placementRef.current as HandPlacement, cx, cy, handSize, sizeRef.current, colorRef.current);
+        }
+      }
 
       rafRef.current = requestAnimationFrame(runHandDemoLoop);
     };
@@ -288,5 +446,13 @@ export function useTryOn({ active, product, colorHex, sizeScale }: UseTryOnOptio
     };
   }, [active, trackingTarget]);
 
-  return { videoRef, canvasRef, demoMode, trackingReady };
+  useEffect(
+    () => () => {
+      modelViewerRef.current?.dispose();
+      modelViewerRef.current = null;
+    },
+    [],
+  );
+
+  return { videoRef, canvasRef, modelCanvasRef, demoMode, trackingReady, modelError };
 }

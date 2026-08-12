@@ -1,0 +1,128 @@
+.model-upload__input {
+  display: none;
+}
+
+.model-upload__cta {
+  width: 100%;
+}
+
+.model-upload__active {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.model-upload__filename {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-neutral-900);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--color-neutral-300);
+}
+
+.model-upload__filename-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-upload__remove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-neutral-400);
+  cursor: pointer;
+}
+
+.model-upload__remove:hover {
+  color: var(--color-text);
+}
+
+.model-upload__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.model-upload__field-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-neutral-400);
+}
+
+.model-upload__segmented {
+  display: flex;
+  background: var(--color-neutral-900);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 3px;
+}
+
+.model-upload__segment {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--color-neutral-300);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.model-upload__segment--active {
+  background: var(--color-accent);
+  color: var(--color-neutral-100);
+}
+
+.model-upload__select {
+  background: var(--color-neutral-900);
+  color: var(--color-text);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.model-upload__tints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.model-upload__tint {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.model-upload__tint--active {
+  border-color: var(--color-accent);
+}
+
+.model-upload__replace {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.model-upload__error {
+  margin-top: var(--space-2);
+  font-size: 12px;
+  color: #e0879a;
+}

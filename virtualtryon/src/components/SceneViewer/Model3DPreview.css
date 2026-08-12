@@ -1,0 +1,33 @@
+.model3d-preview {
+  position: relative;
+  aspect-ratio: 1 / 1;
+}
+
+.model3d-preview__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+
+.model3d-preview__canvas:active {
+  cursor: grabbing;
+}
+
+.model3d-preview__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-4);
+  font-size: 13px;
+  color: var(--color-neutral-400);
+  pointer-events: none;
+}
+
+.model3d-preview__status--error {
+  color: var(--color-neutral-300);
+}

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import type { Category, Product } from '../../data/products';
+import type { CustomModel, CustomPlacement, CustomTrackingTarget } from '../../data/customModel';
 import { CategoryTabs } from './CategoryTabs';
 import { ProductPicker } from './ProductPicker';
 import { ColorSwatchGrid } from './ColorSwatchGrid';
 import { SizeSegmented } from './SizeSegmented';
+import { ModelUploadPanel } from './ModelUploadPanel';
 import './CustomizePanel.css';
 
 interface CustomizePanelProps {
@@ -16,6 +18,12 @@ interface CustomizePanelProps {
   sizeIndex: number;
   onSelectColor: (index: number) => void;
   onSelectSize: (index: number) => void;
+  customModel: CustomModel | null;
+  onUploadModel: (model: CustomModel) => void;
+  onRemoveModel: () => void;
+  onChangeModelTarget: (target: CustomTrackingTarget) => void;
+  onChangeModelPlacement: (placement: CustomPlacement) => void;
+  onChangeModelTint: (tintIndex: number) => void;
 }
 
 /**
@@ -33,9 +41,16 @@ export function CustomizePanel({
   sizeIndex,
   onSelectColor,
   onSelectSize,
+  customModel,
+  onUploadModel,
+  onRemoveModel,
+  onChangeModelTarget,
+  onChangeModelPlacement,
+  onChangeModelTint,
 }: CustomizePanelProps) {
   const [frameOpen, setFrameOpen] = useState(true);
   const [sizeOpen, setSizeOpen] = useState(true);
+  const [modelOpen, setModelOpen] = useState(true);
 
   return (
     <aside className="customize-panel" aria-label="Customize product">
@@ -47,31 +62,36 @@ export function CustomizePanel({
       </div>
 
       <div className="customize-panel__eyebrow">
-        {product.name} <span className="customize-panel__eyebrow-type">&middot; {product.type}</span>
+        {customModel ? customModel.name : product.name}{' '}
+        <span className="customize-panel__eyebrow-type">
+          &middot; {customModel ? 'Your upload' : product.type}
+        </span>
       </div>
 
       <div className="customize-panel__body">
-        <section className="customize-panel__section">
-          <button
-            type="button"
-            className="customize-panel__section-header"
-            aria-expanded={frameOpen}
-            onClick={() => setFrameOpen((v) => !v)}
-          >
-            Customize {product.type}
-            <CaretIcon up={frameOpen} />
-          </button>
-          {frameOpen && (
-            <div className="customize-panel__section-body">
-              <button type="button" className="btn btn-primary customize-panel__material">
-                {product.material}
-              </button>
-              <div className="customize-panel__label">Colors</div>
-              <hr className="hr customize-panel__hr" />
-              <ColorSwatchGrid colors={product.colors} colorIndex={colorIndex} onSelect={onSelectColor} />
-            </div>
-          )}
-        </section>
+        {!customModel && (
+          <section className="customize-panel__section">
+            <button
+              type="button"
+              className="customize-panel__section-header"
+              aria-expanded={frameOpen}
+              onClick={() => setFrameOpen((v) => !v)}
+            >
+              Customize {product.type}
+              <CaretIcon up={frameOpen} />
+            </button>
+            {frameOpen && (
+              <div className="customize-panel__section-body">
+                <button type="button" className="btn btn-primary customize-panel__material">
+                  {product.material}
+                </button>
+                <div className="customize-panel__label">Colors</div>
+                <hr className="hr customize-panel__hr" />
+                <ColorSwatchGrid colors={product.colors} colorIndex={colorIndex} onSelect={onSelectColor} />
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="customize-panel__section">
           <button
@@ -85,8 +105,32 @@ export function CustomizePanel({
           </button>
           {sizeOpen && (
             <div className="customize-panel__section-body customize-panel__size-row">
-              <span className="customize-panel__size-label">{product.type}</span>
+              <span className="customize-panel__size-label">{customModel ? customModel.name : product.type}</span>
               <SizeSegmented sizeIndex={sizeIndex} onSelect={onSelectSize} />
+            </div>
+          )}
+        </section>
+
+        <section className="customize-panel__section">
+          <button
+            type="button"
+            className="customize-panel__section-header"
+            aria-expanded={modelOpen}
+            onClick={() => setModelOpen((v) => !v)}
+          >
+            Your 3D Model
+            <CaretIcon up={modelOpen} />
+          </button>
+          {modelOpen && (
+            <div className="customize-panel__section-body">
+              <ModelUploadPanel
+                customModel={customModel}
+                onUpload={onUploadModel}
+                onRemove={onRemoveModel}
+                onChangeTarget={onChangeModelTarget}
+                onChangePlacement={onChangeModelPlacement}
+                onChangeTint={onChangeModelTint}
+              />
             </div>
           )}
         </section>

@@ -1,23 +1,27 @@
-import type { Product } from '../../data/products';
+import type { Placement, TrackingTarget } from '../../data/products';
 import { useTryOn } from '../../hooks/useTryOn';
 import './TryOnPane.css';
 
 interface TryOnPaneProps {
-  product: Product;
+  trackingTarget: TrackingTarget;
+  placement: Placement;
   colorHex: string;
   sizeScale: number;
+  customModel: { url: string; tintHex: string | null } | null;
   onClose: () => void;
 }
 
-export function TryOnPane({ product, colorHex, sizeScale, onClose }: TryOnPaneProps) {
-  const { videoRef, canvasRef, demoMode, trackingReady } = useTryOn({
+export function TryOnPane({ trackingTarget, placement, colorHex, sizeScale, customModel, onClose }: TryOnPaneProps) {
+  const { videoRef, canvasRef, modelCanvasRef, demoMode, trackingReady, modelError } = useTryOn({
     active: true,
-    product,
+    trackingTarget,
+    placement,
     colorHex,
     sizeScale,
+    customModel,
   });
 
-  const isHand = product.trackingTarget === 'hand';
+  const isHand = trackingTarget === 'hand';
 
   return (
     <>
@@ -48,6 +52,7 @@ export function TryOnPane({ product, colorHex, sizeScale, onClose }: TryOnPanePr
         )}
 
         <canvas ref={canvasRef} className="tryon-pane__canvas" />
+        <canvas ref={modelCanvasRef} className="tryon-pane__canvas" />
       </div>
 
       {trackingReady && (
@@ -55,6 +60,10 @@ export function TryOnPane({ product, colorHex, sizeScale, onClose }: TryOnPanePr
           <span className="tryon-pane__tracking-dot" />
           Tracking {isHand ? 'hand' : 'face'}
         </div>
+      )}
+
+      {modelError && (
+        <div className="tryon-pane__model-error">Couldn&apos;t load your 3D model — showing catalog view instead.</div>
       )}
     </>
   );
