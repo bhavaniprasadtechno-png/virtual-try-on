@@ -14,9 +14,8 @@ category/product system and hand tracking.
 ## Stack
 
 - React 18 + TypeScript, built with Vite
-- [face-api.js](https://github.com/justadudewhohacks/face-api.js) (TinyFaceDetector) for face tracking (eyewear, necklaces, earrings)
-- [@mediapipe/tasks-vision](https://github.com/google-ai-edge/mediapipe) (HandLandmarker) for hand tracking (rings, bracelets)
-- Both models' weights **and** the MediaPipe wasm runtime are **self-hosted** under `public/` rather than fetched from a public CDN at runtime, and both libraries are loaded via dynamic `import()` so their (sizeable) bundles only download once Try-On mode actually needs them
+- [@mediapipe/tasks-vision](https://github.com/google-ai-edge/mediapipe) — FaceLandmarker (478-point face mesh, incl. iris) for face tracking (eyewear, necklaces, earrings), HandLandmarker for hand tracking (rings, bracelets)
+- Both models' weights **and** the MediaPipe wasm runtime are **self-hosted** under `public/` rather than fetched from a public CDN at runtime, and the library is loaded via dynamic `import()` so its (sizeable) bundle only downloads once Try-On mode actually needs it
 - No UI framework dependency — plain CSS using design tokens (`src/styles/tokens.css`) lifted from the handoff's design system
 
 ## Getting started
@@ -37,10 +36,13 @@ npm run lint       # eslint
   swatches, size segmented control) that becomes a right-hand sidebar on
   wide viewports and a bottom sheet on narrow ones.
 - **Virtual Try-On mode** — requests `getUserMedia` and draws a canvas
-  overlay tracking the body part matching the selected product: eye-line for
-  glasses, neck for necklaces, both ears for earrings, ring finger for
-  rings, wrist for bracelets. Color and size selections apply live without
-  restarting the camera.
+  overlay tracking the body part matching the selected product: eyewear and
+  earrings anchor on actual eye-corner/iris/ear landmarks (not a bounding-box
+  heuristic) and every face-tracked placement rolls with head tilt using the
+  eye-line angle, so the fit follows head orientation instead of always
+  drawing upright. Rings/bracelets similarly roll with the hand's current
+  orientation. Color and size selections apply live without restarting the
+  camera.
 - **Rendering is decoupled from detection** — the canvas redraws every
   animation frame using the last known tracked position, while face/hand
   detection runs as a separate, self-throttling async loop that updates
@@ -64,17 +66,18 @@ src/
                           customize panel, floating controls
   hooks/
     useTryOn.ts           camera lifecycle + decoupled render/detect loops
-    useFaceModels.ts      lazy-loaded face-api.js + self-hosted weights
+    useFaceLandmarker.ts  lazy-loaded MediaPipe FaceLandmarker + self-hosted
+                          weights
     useHandModel.ts       lazy-loaded MediaPipe HandLandmarker + self-hosted
                           wasm runtime and model
   lib/
     drawGlasses.ts        canvas drawing routine — eyewear
     drawJewellery.ts      canvas drawing routines — necklace/earring/ring/bracelet
-    overlay.ts            dispatches placement -> draw routine + anchor geometry
+    overlay.ts            dispatches placement -> draw routine + anchor/rotation geometry
   data/
     products.ts           product catalog (category, tracking target, placement, colors)
 public/
-  models/                 self-hosted TinyFaceDetector weights + hand_landmarker.task
+  models/                 self-hosted face_landmarker.task + hand_landmarker.task
   mediapipe/wasm/         self-hosted MediaPipe vision wasm runtime
 ```
 

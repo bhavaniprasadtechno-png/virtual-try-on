@@ -5,11 +5,14 @@ import {
   drawHandPlacement,
   getFacePlacementFrames,
   getHandPlacementFrame,
+  type FaceAnchors,
   type FacePlacement,
+  type HandAnchors,
   type HandPlacement,
+  type Point,
 } from '../lib/overlay';
 import { loadModelViewer, type ModelViewerHandle } from '../lib/modelViewer';
-import { getReadyFaceApi, loadFaceModels } from './useFaceModels';
+import { getReadyFaceLandmarker, loadFaceLandmarker } from './useFaceLandmarker';
 import { getReadyHandLandmarker, loadHandModel } from './useHandModel';
 
 interface CustomModelOverlay {
@@ -44,17 +47,27 @@ interface UseTryOnResult {
   modelError: boolean;
 }
 
-interface FaceAnchor {
-  cx: number;
-  cy: number;
-  faceW: number;
-  faceH: number;
-}
+/**
+ * MediaPipe FaceLandmarker's canonical 478-point face mesh indices for the
+ * handful of points placement needs. Verified against the model's actual
+ * output (see the landmark map in MediaPipe's face mesh documentation) —
+ * stable across faces since they're topological mesh indices, not detected
+ * per-frame.
+ */
+const FACE_LM = {
+  eyeOuterA: 33,
+  eyeOuterB: 263,
+  irisA: 468,
+  irisB: 473,
+  earA: 234,
+  earB: 454,
+  chin: 152,
+  forehead: 10,
+} as const;
 
-interface HandAnchor {
-  cx: number;
-  cy: number;
-  handSize: number;
+/** Converts a normalized (0-1) landmark to mirrored canvas pixel space, matching the mirrored video. */
+function toCanvasPoint(landmark: { x: number; y: number }, canvas: HTMLCanvasElement) {
+  return { x: (1 - landmark.x) * canvas.width, y: landmark.y * canvas.height };
 }
 
 /**
@@ -69,6 +82,12 @@ interface HandAnchor {
  * (tens of ms on a fast GPU, several hundred on a slow/software-rendered
  * one) — coupling redraw to detection would make the overlay flicker
  * blank on slower devices instead of just updating position less often.
+ *
+ * Face tracking uses MediaPipe FaceLandmarker's 478-point mesh (eye
+ * corners, iris centers, near-ear points, chin/forehead) rather than a
+ * plain bounding box, so eyewear/necklaces/earrings anchor on the actual
+ * feature instead of a heuristic offset, and roll with head tilt using the
+ * eye-line angle for a realistic fit.
  *
  * When `customModel` is set, the same per-frame anchor drives a WebGL
  * overlay (see lib/modelViewer.ts) instead of the 2D line-art routines, so
@@ -91,8 +110,8 @@ export function useTryOn({
   const colorRef = useRef(colorHex);
   const sizeRef = useRef(sizeScale);
   const placementRef = useRef(placement);
-  const faceAnchorRef = useRef<FaceAnchor | null>(null);
-  const handAnchorRef = useRef<HandAnchor | null>(null);
+  const faceAnchorsRef = useRef<FaceAnchors | null>(null);
+  const handAnchorsRef = useRef<HandAnchors | null>(null);
   const modelViewerRef = useRef<ModelViewerHandle | null>(null);
   const modelViewerSizeRef = useRef({ width: 0, height: 0 });
 
@@ -162,32 +181,29 @@ export function useTryOn({
 
     let cancelled = false;
     let detecting = false;
-    faceAnchorRef.current = null;
-    handAnchorRef.current = null;
+    faceAnchorsRef.current = null;
+    handAnchorsRef.current = null;
     setDemoMode(false);
     setTrackingReady(false);
 
     const detectFaceOnce = async () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      const faceapi = getReadyFaceApi();
-      if (!video || !canvas || !faceapi || !video.videoWidth) return;
+      const landmarker = getReadyFaceLandmarker();
+      if (!video || !canvas || !landmarker || !video.videoWidth) return;
       try {
-        const detection = await faceapi.detectSingleFace(
-          video,
-          new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }),
-        );
-        if (cancelled || !detection) return;
-        const scaleX = canvas.width / video.videoWidth;
-        const scaleY = canvas.height / video.videoHeight;
-        const { box } = detection;
-        // video is mirrored (scaleX(-1)), so flip the detected box to match
-        const mirroredX = video.videoWidth - (box.x + box.width);
-        faceAnchorRef.current = {
-          cx: (mirroredX + box.width / 2) * scaleX,
-          cy: (box.y + box.height * 0.42) * scaleY,
-          faceW: box.width * scaleX,
-          faceH: box.height * scaleY,
+        const result = landmarker.detectForVideo(video, performance.now());
+        const lm = result.faceLandmarks[0];
+        if (cancelled || !lm) return;
+        faceAnchorsRef.current = {
+          eyeA: toCanvasPoint(lm[FACE_LM.eyeOuterA], canvas),
+          eyeB: toCanvasPoint(lm[FACE_LM.eyeOuterB], canvas),
+          irisA: toCanvasPoint(lm[FACE_LM.irisA], canvas),
+          irisB: toCanvasPoint(lm[FACE_LM.irisB], canvas),
+          earA: toCanvasPoint(lm[FACE_LM.earA], canvas),
+          earB: toCanvasPoint(lm[FACE_LM.earB], canvas),
+          chin: toCanvasPoint(lm[FACE_LM.chin], canvas),
+          forehead: toCanvasPoint(lm[FACE_LM.forehead], canvas),
         };
       } catch {
         // transient detection failure; keep the last known anchor
@@ -203,32 +219,58 @@ export function useTryOn({
         const result = landmarker.detectForVideo(video, performance.now());
         if (cancelled || result.landmarks.length === 0) return;
         const landmarks = result.landmarks[0];
-        const wrist = landmarks[0];
-        const middleMcp = landmarks[9];
-        // ring finger MCP for the ring anchor, wrist for the bracelet anchor
-        const anchor = placementRef.current === 'wrist' ? wrist : landmarks[13];
         // video is mirrored (scaleX(-1)); landmarks are normalized (0-1) on the raw frame
-        const dx = (middleMcp.x - wrist.x) * canvas.width;
-        const dy = (middleMcp.y - wrist.y) * canvas.height;
-        handAnchorRef.current = {
-          cx: (1 - anchor.x) * canvas.width,
-          cy: anchor.y * canvas.height,
-          handSize: Math.hypot(dx, dy),
+        handAnchorsRef.current = {
+          wrist: toCanvasPoint(landmarks[0], canvas),
+          middleMcp: toCanvasPoint(landmarks[9], canvas),
+          ringAnchor: toCanvasPoint(landmarks[13], canvas),
         };
       } catch {
         // transient detection failure; keep the last known anchor
       }
     };
 
-    const renderModelOverlay = (canvas: HTMLCanvasElement, frames: { x: number; y: number; size: number }[]) => {
+    const renderModelOverlay = (canvas: HTMLCanvasElement, frames: { x: number; y: number; size: number; rotation: number }[]) => {
       const handle = modelViewerRef.current;
       if (!handle) return;
       if (modelViewerSizeRef.current.width !== canvas.width || modelViewerSizeRef.current.height !== canvas.height) {
         handle.resize(canvas.width, canvas.height);
         modelViewerSizeRef.current = { width: canvas.width, height: canvas.height };
       }
-      handle.setInstances(frames.map((f) => ({ ...f, rotationY: customModelRotationRef.current })));
+      handle.setInstances(
+        frames.map((f) => ({ x: f.x, y: f.y, size: f.size, rotationZ: f.rotation, rotationY: customModelRotationRef.current })),
+      );
       handle.render();
+    };
+
+    const defaultFaceAnchors = (canvas: HTMLCanvasElement, eyeCyFactor = 0.42, faceWFactor = 0.32): FaceAnchors => {
+      const eyeCx = canvas.width / 2;
+      const eyeCy = canvas.height * eyeCyFactor;
+      const faceW = canvas.width * faceWFactor;
+      const faceH = faceW * 0.9;
+      const eyeSpan = faceW * 0.5;
+      const earOffset = faceW * 0.56;
+      return {
+        eyeA: { x: eyeCx - eyeSpan / 2, y: eyeCy },
+        eyeB: { x: eyeCx + eyeSpan / 2, y: eyeCy },
+        irisA: { x: eyeCx - eyeSpan / 2, y: eyeCy },
+        irisB: { x: eyeCx + eyeSpan / 2, y: eyeCy },
+        earA: { x: eyeCx - earOffset, y: eyeCy + faceH * 0.18 },
+        earB: { x: eyeCx + earOffset, y: eyeCy + faceH * 0.18 },
+        chin: { x: eyeCx, y: eyeCy + faceH * 0.55 },
+        forehead: { x: eyeCx, y: eyeCy - faceH * 0.45 },
+      };
+    };
+
+    const defaultHandAnchors = (canvas: HTMLCanvasElement): HandAnchors => {
+      const cx = canvas.width / 2;
+      const cy = canvas.height * 0.55;
+      const handSize = canvas.width * 0.3;
+      return {
+        wrist: { x: cx, y: cy },
+        middleMcp: { x: cx, y: cy - handSize },
+        ringAnchor: { x: cx + handSize * 0.15, y: cy - handSize * 0.7 },
+      };
     };
 
     const runFaceRenderLoop = () => {
@@ -239,39 +281,19 @@ export function useTryOn({
       if (video.videoWidth) {
         canvas.width = video.clientWidth;
         canvas.height = video.clientHeight;
-        const anchor = faceAnchorRef.current;
-        const eyeCx = anchor?.cx ?? canvas.width / 2;
-        const eyeCy = anchor?.cy ?? canvas.height * 0.42;
-        const faceW = anchor?.faceW ?? canvas.width * 0.32;
-        const faceH = anchor?.faceH ?? faceW * 0.9;
+        const anchors = faceAnchorsRef.current ?? defaultFaceAnchors(canvas);
 
         if (modelViewerRef.current && modelCanvasRef.current) {
           const modelCanvas = modelCanvasRef.current;
           modelCanvas.width = canvas.width;
           modelCanvas.height = canvas.height;
-          const frames = getFacePlacementFrames(
-            placementRef.current as FacePlacement,
-            eyeCx,
-            eyeCy,
-            faceW,
-            faceH,
-            sizeRef.current,
-          );
+          const frames = getFacePlacementFrames(placementRef.current as FacePlacement, anchors, sizeRef.current);
           renderModelOverlay(modelCanvas, frames);
         } else {
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawFacePlacement(
-              ctx,
-              placementRef.current as FacePlacement,
-              eyeCx,
-              eyeCy,
-              faceW,
-              faceH,
-              sizeRef.current,
-              colorRef.current,
-            );
+            drawFacePlacement(ctx, placementRef.current as FacePlacement, anchors, sizeRef.current, colorRef.current);
           }
         }
 
@@ -294,22 +316,19 @@ export function useTryOn({
       if (video.videoWidth) {
         canvas.width = video.clientWidth;
         canvas.height = video.clientHeight;
-        const anchor = handAnchorRef.current;
-        const cx = anchor?.cx ?? canvas.width / 2;
-        const cy = anchor?.cy ?? canvas.height * 0.55;
-        const handSize = anchor?.handSize ?? canvas.width * 0.3;
+        const anchors = handAnchorsRef.current ?? defaultHandAnchors(canvas);
 
         if (modelViewerRef.current && modelCanvasRef.current) {
           const modelCanvas = modelCanvasRef.current;
           modelCanvas.width = canvas.width;
           modelCanvas.height = canvas.height;
-          const frame = getHandPlacementFrame(placementRef.current as HandPlacement, cx, cy, handSize, sizeRef.current);
+          const frame = getHandPlacementFrame(placementRef.current as HandPlacement, anchors, sizeRef.current);
           renderModelOverlay(modelCanvas, [frame]);
         } else {
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawHandPlacement(ctx, placementRef.current as HandPlacement, cx, cy, handSize, sizeRef.current, colorRef.current);
+            drawHandPlacement(ctx, placementRef.current as HandPlacement, anchors, sizeRef.current, colorRef.current);
           }
         }
 
@@ -332,38 +351,43 @@ export function useTryOn({
       canvas.height = parent.clientHeight;
 
       const t = performance.now() / 1000;
-      const eyeCx = canvas.width / 2 + Math.sin(t * 0.6) * 6;
-      const eyeCy = canvas.height * 0.2 + Math.cos(t * 0.5) * 4;
-      const faceW = canvas.width * 0.19;
-      const faceH = faceW * 0.9;
+      const sway = { x: Math.sin(t * 0.6) * 6, y: Math.cos(t * 0.5) * 4 };
+      // Small synthetic head-tilt sway so the demo shows the same roll
+      // behavior real tracking has, applied around the eye-line midpoint.
+      const tilt = Math.sin(t * 0.3) * 0.05;
+      const base = defaultFaceAnchors(canvas, 0.2, 0.19);
+      const pivot = { x: (base.eyeA.x + base.eyeB.x) / 2 + sway.x, y: (base.eyeA.y + base.eyeB.y) / 2 + sway.y };
+      const swayAndTilt = (p: Point): Point => {
+        const shifted = { x: p.x + sway.x, y: p.y + sway.y };
+        const dx = shifted.x - pivot.x;
+        const dy = shifted.y - pivot.y;
+        return {
+          x: pivot.x + dx * Math.cos(tilt) - dy * Math.sin(tilt),
+          y: pivot.y + dx * Math.sin(tilt) + dy * Math.cos(tilt),
+        };
+      };
+      const anchors: FaceAnchors = {
+        eyeA: swayAndTilt(base.eyeA),
+        eyeB: swayAndTilt(base.eyeB),
+        irisA: swayAndTilt(base.irisA),
+        irisB: swayAndTilt(base.irisB),
+        earA: swayAndTilt(base.earA),
+        earB: swayAndTilt(base.earB),
+        chin: swayAndTilt(base.chin),
+        forehead: swayAndTilt(base.forehead),
+      };
 
       if (modelViewerRef.current && modelCanvasRef.current) {
         const modelCanvas = modelCanvasRef.current;
         modelCanvas.width = canvas.width;
         modelCanvas.height = canvas.height;
-        const frames = getFacePlacementFrames(
-          placementRef.current as FacePlacement,
-          eyeCx,
-          eyeCy,
-          faceW,
-          faceH,
-          sizeRef.current,
-        );
+        const frames = getFacePlacementFrames(placementRef.current as FacePlacement, anchors, sizeRef.current);
         renderModelOverlay(modelCanvas, frames);
       } else {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          drawFacePlacement(
-            ctx,
-            placementRef.current as FacePlacement,
-            eyeCx,
-            eyeCy,
-            faceW,
-            faceH,
-            sizeRef.current,
-            colorRef.current,
-          );
+          drawFacePlacement(ctx, placementRef.current as FacePlacement, anchors, sizeRef.current, colorRef.current);
         }
       }
 
@@ -378,21 +402,25 @@ export function useTryOn({
       canvas.height = parent.clientHeight;
 
       const t = performance.now() / 1000;
-      const cx = canvas.width / 2 + Math.sin(t * 0.5) * 8;
-      const cy = canvas.height * 0.58 + Math.cos(t * 0.4) * 6;
-      const handSize = canvas.width * 0.3;
+      const sway = { x: Math.sin(t * 0.5) * 8, y: Math.cos(t * 0.4) * 6 };
+      const base = defaultHandAnchors(canvas);
+      const anchors: HandAnchors = {
+        wrist: { x: base.wrist.x + sway.x, y: base.wrist.y + sway.y },
+        middleMcp: { x: base.middleMcp.x + sway.x, y: base.middleMcp.y + sway.y },
+        ringAnchor: { x: base.ringAnchor.x + sway.x, y: base.ringAnchor.y + sway.y },
+      };
 
       if (modelViewerRef.current && modelCanvasRef.current) {
         const modelCanvas = modelCanvasRef.current;
         modelCanvas.width = canvas.width;
         modelCanvas.height = canvas.height;
-        const frame = getHandPlacementFrame(placementRef.current as HandPlacement, cx, cy, handSize, sizeRef.current);
+        const frame = getHandPlacementFrame(placementRef.current as HandPlacement, anchors, sizeRef.current);
         renderModelOverlay(modelCanvas, [frame]);
       } else {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          drawHandPlacement(ctx, placementRef.current as HandPlacement, cx, cy, handSize, sizeRef.current, colorRef.current);
+          drawHandPlacement(ctx, placementRef.current as HandPlacement, anchors, sizeRef.current, colorRef.current);
         }
       }
 
@@ -419,7 +447,7 @@ export function useTryOn({
         }
 
         if (trackingTarget === 'face') {
-          loadFaceModels().then((ok) => {
+          loadFaceLandmarker().then((ok) => {
             if (!cancelled) setTrackingReady(ok);
           });
           runFaceRenderLoop();
