@@ -14,6 +14,8 @@ import {
 import { loadModelViewer, type ModelViewerHandle } from '../lib/modelViewer';
 import { getReadyFaceLandmarker, loadFaceLandmarker } from './useFaceLandmarker';
 import { getReadyHandLandmarker, loadHandModel } from './useHandModel';
+import { OneEuroFilter, Point2DFilter } from '../lib/oneEuroFilter';
+import { matrixToEuler } from '../lib/headPose';
 
 interface CustomModelOverlay {
   url: string;
@@ -47,7 +49,12 @@ interface UseTryOnResult {
   trackingReady: boolean;
   /** Set if a custom model was requested but failed to load. */
   modelError: boolean;
+  /** True once real tracking has gone CONFIDENCE_TIMEOUT_MS without a successful detection — never true in demo mode. */
+  lowConfidence: boolean;
 }
+
+/** How long without a successful detection before surfacing a low-confidence hint instead of silently holding the last position forever. */
+const CONFIDENCE_TIMEOUT_MS = 1200;
 
 /**
  * MediaPipe FaceLandmarker's canonical 478-point face mesh indices for the
@@ -56,15 +63,29 @@ interface UseTryOnResult {
  * stable across faces since they're topological mesh indices, not detected
  * per-frame.
  */
+// eyeOuterA/B (and irisA/B, earA/B below) are deliberately assigned so that,
+// after toCanvasPoint's mirroring, "A" lands on the visual left and "B" on
+// the visual right — matching defaultFaceAnchors' synthetic layout below.
+// MediaPipe's raw (unmirrored) landmark 33 is the subject's right eye
+// (visual left of a normal photo) and 263 is the subject's left eye
+// (visual right); mirroring flips that, so 263 must feed "A" and 33 must
+// feed "B" for the two conventions to agree. Getting this backwards doesn't
+// break anchor position (symmetric midpoint/distance math), only the
+// roll — `angleBetween(A, B)` comes out exactly pi radians off, invisible
+// in this project's demo-mode-only testing (no real camera in this
+// sandbox) but very visible on real-camera roll for eyewear/necklace/
+// earrings. Verified against real MediaPipe output on a static photo.
 const FACE_LM = {
-  eyeOuterA: 33,
-  eyeOuterB: 263,
-  irisA: 468,
-  irisB: 473,
-  earA: 234,
-  earB: 454,
+  eyeOuterA: 263,
+  eyeOuterB: 33,
+  irisA: 473,
+  irisB: 468,
+  earA: 454,
+  earB: 234,
   chin: 152,
   forehead: 10,
+  /** Bridge of the nose, between the eyebrows — verified against real detector output on a static test photo (x centered between the eyes, y just above the eye-corner line). */
+  nasion: 168,
 } as const;
 
 /** Converts a normalized (0-1) landmark to mirrored canvas pixel space, matching the mirrored video. */
@@ -120,6 +141,7 @@ export function useTryOn({
   const [demoMode, setDemoMode] = useState(false);
   const [trackingReady, setTrackingReady] = useState(false);
   const [modelError, setModelError] = useState(false);
+  const [lowConfidence, setLowConfidence] = useState(false);
 
   useEffect(() => {
     colorRef.current = colorHex;
@@ -192,6 +214,40 @@ export function useTryOn({
     handAnchorsRef.current = null;
     setDemoMode(false);
     setTrackingReady(false);
+    setLowConfidence(false);
+
+    // One filter per tracked landmark, so jitter is smoothed per-point
+    // rather than after the fact on the derived placement — recreated each
+    // time real tracking (re)starts, matching faceAnchorsRef/handAnchorsRef
+    // being reset just above.
+    const faceFilters = {
+      eyeA: new Point2DFilter(),
+      eyeB: new Point2DFilter(),
+      irisA: new Point2DFilter(),
+      irisB: new Point2DFilter(),
+      earA: new Point2DFilter(),
+      earB: new Point2DFilter(),
+      chin: new Point2DFilter(),
+      forehead: new Point2DFilter(),
+      nasion: new Point2DFilter(),
+    };
+    const handFilters = {
+      wrist: new Point2DFilter(),
+      middleMcp: new Point2DFilter(),
+      ringAnchor: new Point2DFilter(),
+    };
+    const headPosePitchFilter = new OneEuroFilter();
+    const headPoseYawFilter = new OneEuroFilter();
+    // Smoothed head pose driving the 3D model overlay's extra tilt (on top
+    // of the user's static orientation correction) — stays at zero in demo
+    // mode / before the first real detection, since no matrix exists yet.
+    let headPose = { pitch: 0, yaw: 0 };
+
+    // Baseline "last confident detection" time is now, not zero — otherwise
+    // the low-confidence hint would flash on before tracking has even had a
+    // chance to run once.
+    let lastFaceDetectionMs = performance.now();
+    let lastHandDetectionMs = performance.now();
 
     const detectFaceOnce = async () => {
       const video = videoRef.current;
@@ -199,19 +255,31 @@ export function useTryOn({
       const landmarker = getReadyFaceLandmarker();
       if (!video || !canvas || !landmarker || !video.videoWidth) return;
       try {
-        const result = landmarker.detectForVideo(video, performance.now());
+        const now = performance.now();
+        const result = landmarker.detectForVideo(video, now);
         const lm = result.faceLandmarks[0];
         if (cancelled || !lm) return;
+        lastFaceDetectionMs = now;
         faceAnchorsRef.current = {
-          eyeA: toCanvasPoint(lm[FACE_LM.eyeOuterA], canvas),
-          eyeB: toCanvasPoint(lm[FACE_LM.eyeOuterB], canvas),
-          irisA: toCanvasPoint(lm[FACE_LM.irisA], canvas),
-          irisB: toCanvasPoint(lm[FACE_LM.irisB], canvas),
-          earA: toCanvasPoint(lm[FACE_LM.earA], canvas),
-          earB: toCanvasPoint(lm[FACE_LM.earB], canvas),
-          chin: toCanvasPoint(lm[FACE_LM.chin], canvas),
-          forehead: toCanvasPoint(lm[FACE_LM.forehead], canvas),
+          eyeA: faceFilters.eyeA.filter(toCanvasPoint(lm[FACE_LM.eyeOuterA], canvas), now),
+          eyeB: faceFilters.eyeB.filter(toCanvasPoint(lm[FACE_LM.eyeOuterB], canvas), now),
+          irisA: faceFilters.irisA.filter(toCanvasPoint(lm[FACE_LM.irisA], canvas), now),
+          irisB: faceFilters.irisB.filter(toCanvasPoint(lm[FACE_LM.irisB], canvas), now),
+          earA: faceFilters.earA.filter(toCanvasPoint(lm[FACE_LM.earA], canvas), now),
+          earB: faceFilters.earB.filter(toCanvasPoint(lm[FACE_LM.earB], canvas), now),
+          chin: faceFilters.chin.filter(toCanvasPoint(lm[FACE_LM.chin], canvas), now),
+          forehead: faceFilters.forehead.filter(toCanvasPoint(lm[FACE_LM.forehead], canvas), now),
+          nasion: faceFilters.nasion.filter(toCanvasPoint(lm[FACE_LM.nasion], canvas), now),
         };
+
+        const matrix = result.facialTransformationMatrixes?.[0]?.data;
+        if (matrix) {
+          const euler = matrixToEuler(matrix);
+          headPose = {
+            pitch: headPosePitchFilter.filter(euler.pitch, now),
+            yaw: headPoseYawFilter.filter(euler.yaw, now),
+          };
+        }
       } catch {
         // transient detection failure; keep the last known anchor
       }
@@ -223,14 +291,16 @@ export function useTryOn({
       const landmarker = getReadyHandLandmarker();
       if (!video || !canvas || !landmarker || !video.videoWidth) return;
       try {
-        const result = landmarker.detectForVideo(video, performance.now());
+        const now = performance.now();
+        const result = landmarker.detectForVideo(video, now);
         if (cancelled || result.landmarks.length === 0) return;
+        lastHandDetectionMs = now;
         const landmarks = result.landmarks[0];
         // video is mirrored (scaleX(-1)); landmarks are normalized (0-1) on the raw frame
         handAnchorsRef.current = {
-          wrist: toCanvasPoint(landmarks[0], canvas),
-          middleMcp: toCanvasPoint(landmarks[9], canvas),
-          ringAnchor: toCanvasPoint(landmarks[13], canvas),
+          wrist: handFilters.wrist.filter(toCanvasPoint(landmarks[0], canvas), now),
+          middleMcp: handFilters.middleMcp.filter(toCanvasPoint(landmarks[9], canvas), now),
+          ringAnchor: handFilters.ringAnchor.filter(toCanvasPoint(landmarks[13], canvas), now),
         };
       } catch {
         // transient detection failure; keep the last known anchor
@@ -250,8 +320,11 @@ export function useTryOn({
           y: f.y,
           size: f.size,
           rotationZ: f.rotation,
-          rotationY: customModelRotationRef.current,
-          rotationX: customModelRotationXRef.current,
+          // User's static per-upload correction, plus (for real tracking
+          // only — stays zero in demo mode) the live detected head pose, so
+          // the model tilts as the head turns/nods rather than only rolling.
+          rotationY: customModelRotationRef.current + headPose.yaw,
+          rotationX: customModelRotationXRef.current + headPose.pitch,
         })),
       );
       handle.render();
@@ -273,6 +346,8 @@ export function useTryOn({
         earB: { x: eyeCx + earOffset, y: eyeCy + faceH * 0.18 },
         chin: { x: eyeCx, y: eyeCy + faceH * 0.55 },
         forehead: { x: eyeCx, y: eyeCy - faceH * 0.45 },
+        // Just above the eye line, per the real-detector proportions verified for FACE_LM.nasion.
+        nasion: { x: eyeCx, y: eyeCy - eyeSpan * 0.05 },
       };
     };
 
@@ -317,6 +392,8 @@ export function useTryOn({
             detecting = false;
           });
         }
+
+        setLowConfidence(performance.now() - lastFaceDetectionMs > CONFIDENCE_TIMEOUT_MS);
       }
 
       rafRef.current = requestAnimationFrame(runFaceRenderLoop);
@@ -352,6 +429,8 @@ export function useTryOn({
             detecting = false;
           });
         }
+
+        setLowConfidence(performance.now() - lastHandDetectionMs > CONFIDENCE_TIMEOUT_MS);
       }
 
       rafRef.current = requestAnimationFrame(runHandRenderLoop);
@@ -389,6 +468,7 @@ export function useTryOn({
         earB: swayAndTilt(base.earB),
         chin: swayAndTilt(base.chin),
         forehead: swayAndTilt(base.forehead),
+        nasion: swayAndTilt(base.nasion),
       };
 
       if (modelViewerRef.current && modelCanvasRef.current) {
@@ -503,5 +583,5 @@ export function useTryOn({
     [],
   );
 
-  return { videoRef, canvasRef, modelCanvasRef, demoMode, trackingReady, modelError };
+  return { videoRef, canvasRef, modelCanvasRef, demoMode, trackingReady, modelError, lowConfidence };
 }

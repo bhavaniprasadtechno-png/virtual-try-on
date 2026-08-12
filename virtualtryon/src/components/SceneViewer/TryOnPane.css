@@ -87,6 +87,18 @@
   box-shadow: 0 0 6px var(--color-accent);
 }
 
+.tryon-pane__tracking-pill--low-confidence {
+  color: #e8b767;
+  max-width: 220px;
+  text-align: right;
+}
+
+.tryon-pane__tracking-dot--low-confidence {
+  background: #e8b767;
+  box-shadow: 0 0 6px #e8b767;
+  flex: none;
+}
+
 .tryon-pane__model-error {
   position: absolute;
   bottom: 100px;

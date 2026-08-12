@@ -10,8 +10,10 @@ let readyLandmarker: FaceLandmarker | null = null;
  * Lazily loads @mediapipe/tasks-vision and the FaceLandmarker model the
  * first time a face-tracked product (eyewear/necklace/earrings) enters
  * Try-On mode. Its 478-point face mesh (including iris landmarks) drives
- * exact eye/ear/chin anchors and head-tilt (roll) compensation, rather than
- * the coarse face bounding box a plain face detector would give. The wasm
+ * exact eye/ear/chin/nasion anchors and head-tilt (roll) compensation,
+ * rather than the coarse face bounding box a plain face detector would
+ * give; the transformation matrix additionally drives best-effort 3D
+ * pitch/yaw for the custom-model overlay (see lib/headPose.ts). The wasm
  * runtime and the .task model are both self-hosted under /public (not
  * fetched from a public CDN at runtime), matching useHandModel.ts.
  */
@@ -24,6 +26,10 @@ export function loadFaceLandmarker(): Promise<boolean> {
           baseOptions: { modelAssetPath: MODEL_URL },
           runningMode: 'VIDEO',
           numFaces: 1,
+          // Drives best-effort 3D head-pose (pitch/yaw) tracking for the
+          // custom-model overlay — see lib/headPose.ts for the decode step
+          // and its documented sign-convention caveat.
+          outputFacialTransformationMatrixes: true,
         });
         readyLandmarker = landmarker;
         return landmarker;

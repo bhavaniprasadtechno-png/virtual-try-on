@@ -12,7 +12,7 @@ interface TryOnPaneProps {
 }
 
 export function TryOnPane({ trackingTarget, placement, colorHex, sizeScale, customModel, onClose }: TryOnPaneProps) {
-  const { videoRef, canvasRef, modelCanvasRef, demoMode, trackingReady, modelError } = useTryOn({
+  const { videoRef, canvasRef, modelCanvasRef, demoMode, trackingReady, modelError, lowConfidence } = useTryOn({
     active: true,
     trackingTarget,
     placement,
@@ -55,10 +55,17 @@ export function TryOnPane({ trackingTarget, placement, colorHex, sizeScale, cust
         <canvas ref={modelCanvasRef} className="tryon-pane__canvas" />
       </div>
 
-      {trackingReady && (
+      {trackingReady && !(!demoMode && lowConfidence) && (
         <div className="tryon-pane__tracking-pill">
           <span className="tryon-pane__tracking-dot" />
           Tracking {isHand ? 'hand' : 'face'}
+        </div>
+      )}
+
+      {!demoMode && lowConfidence && (
+        <div className="tryon-pane__tracking-pill tryon-pane__tracking-pill--low-confidence">
+          <span className="tryon-pane__tracking-dot tryon-pane__tracking-dot--low-confidence" />
+          {isHand ? "Can't see your hand clearly — move it into frame" : 'Move to better lighting or center your face'}
         </div>
       )}
 
