@@ -178,6 +178,8 @@ export function SceneViewer() {
               onSelectColor={customModel ? handleChangeModelTint : setColorIndex}
               onSelectSize={setSizeIndex}
               onClose={() => setIsPreview(true)}
+              onRotateModel={customModel ? handleRotateModel : undefined}
+              onFlipModel={customModel ? handleFlipModel : undefined}
             />
           </>
         )}
