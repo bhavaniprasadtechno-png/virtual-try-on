@@ -48,6 +48,28 @@ export interface HandAnchors {
   ringAnchor: Point;
 }
 
+/**
+ * Shoulder anchors read off MediaPipe PoseLandmarker, in canvas pixel
+ * space. Optional — only present when a necklace session has started body
+ * tracking (see useTryOn.ts); when absent, necklace placement falls back
+ * to the face-mesh-only estimate it always used. `shoulderA`/`shoulderB`
+ * follow the same "A ends up visual-left after mirroring" convention as
+ * `FaceAnchors.eyeA`/`eyeB` — verified empirically, not swapped like the
+ * eye pair needed (BlazePose's anatomical-left shoulder already lands
+ * visual-left post-mirror).
+ */
+export interface BodyAnchors {
+  shoulderA: Point;
+  shoulderB: Point;
+  /**
+   * Spring-smoothed torso tilt (radians), if the caller wants a "settles
+   * toward" pendant-drape feel instead of the raw instantaneous
+   * shoulder-line angle — see useTryOn.ts's necklaceDrapeSpring. Falls back
+   * to the raw `angleBetween(shoulderA, shoulderB)` when omitted.
+   */
+  drapeRotation?: number;
+}
+
 function angleBetween(a: Point, b: Point): number {
   return Math.atan2(b.y - a.y, b.x - a.x);
 }
@@ -74,12 +96,16 @@ function offsetAlong(p: Point, dist: number, rotation: number): Point {
  * pupil height, and is sized from temple width (ear-to-ear), earrings
  * anchor on the two detected ear points directly (so they track a head
  * turn instead of a fixed symmetric offset), and every placement rolls
- * with head tilt using the eye-line angle.
+ * with head tilt using the eye-line angle. Necklace additionally accepts
+ * optional real shoulder data (`bodyAnchors`) for width/tilt — absent that
+ * (no body tracking running, or demo mode), it falls back to the
+ * face-mesh-only estimate every placement used before.
  */
 export function getFacePlacementFrames(
   placement: FacePlacement,
   anchors: FaceAnchors,
   sizeScale: number,
+  bodyAnchors?: BodyAnchors | null,
 ): PlacementFrame[] {
   const rotation = angleBetween(anchors.eyeA, anchors.eyeB);
   const eyeSpan = distance(anchors.eyeA, anchors.eyeB);
@@ -101,8 +127,25 @@ export function getFacePlacementFrames(
       return [{ x, y, size: earSpan * 1.05 * sizeScale, rotation }];
     }
     case 'neck': {
+      // Position stays exactly the Phase-1 chin-offset estimate regardless
+      // of body tracking — shoulders alone don't pin down where along the
+      // neck a necklace should hang, and this formula already looks right,
+      // so there's nothing to gain (and real regression risk) in touching
+      // it. Only size and rotation improve with real shoulder data.
       const faceHeight = distance(anchors.forehead, anchors.chin);
       const center = offsetAlong(anchors.chin, faceHeight * 0.55, rotation);
+      if (bodyAnchors) {
+        // Real shoulder width, not the ear-span proxy — two people with the
+        // same face width can have very different shoulder widths, and a
+        // necklace should scale with the body it's resting on.
+        const shoulderSpan = distance(bodyAnchors.shoulderA, bodyAnchors.shoulderB);
+        // Torso tilt (shoulder-line angle) instead of head roll — prefers
+        // the caller's spring-smoothed value (settles instead of snapping,
+        // approximating "hangs relative to the body" without a full
+        // physics simulation) when given, else the raw instantaneous angle.
+        const torsoRotation = bodyAnchors.drapeRotation ?? angleBetween(bodyAnchors.shoulderA, bodyAnchors.shoulderB);
+        return [{ x: center.x, y: center.y, size: shoulderSpan * 0.5 * sizeScale, rotation: torsoRotation }];
+      }
       return [{ x: center.x, y: center.y, size: earSpan * 0.95 * sizeScale, rotation }];
     }
     case 'ears': {
@@ -148,8 +191,9 @@ export function drawFacePlacement(
   anchors: FaceAnchors,
   sizeScale: number,
   color: string,
+  bodyAnchors?: BodyAnchors | null,
 ): void {
-  const frames = getFacePlacementFrames(placement, anchors, sizeScale);
+  const frames = getFacePlacementFrames(placement, anchors, sizeScale, bodyAnchors);
   switch (placement) {
     case 'eyes':
       drawGlasses(ctx, frames[0].x, frames[0].y, frames[0].size, color, frames[0].rotation);

@@ -22,6 +22,18 @@ export interface ModelViewerHandle {
   setTint(hex: string | null): void;
   /** Positions N instances of the model (e.g. two for a pair of earrings), adding/removing clones as needed. */
   setInstances(transforms: InstanceTransform[]): void;
+  /**
+   * Positions an invisible depth-only "head" proxy — a flattened ellipsoid,
+   * not a sphere, since a sphere looks identical from every angle and
+   * rotating one would be a no-op — behind the given transform, so parts
+   * of the product model that fall behind it (e.g. a temple arm or lens at
+   * extreme head yaw) are naturally hidden by the normal depth test instead
+   * of rendering through the head. Pass null to disable (e.g. outside
+   * Try-On, or for placements this isn't used for). Approximate/lite: not
+   * real head geometry, just enough to avoid the worst self-intersection
+   * at extreme angles.
+   */
+  setHeadOccluder(transform: InstanceTransform | null): void;
   resize(width: number, height: number): void;
   render(): void;
   dispose(): void;
@@ -60,6 +72,18 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
   const key = new THREE.DirectionalLight(0xffffff, 0.6);
   key.position.set(2, 3, 5);
   scene.add(key);
+
+  // Depth-only ("colorWrite: false") so it's invisible but still
+  // participates in the normal depth test — geometry behind it gets
+  // occluded the same way any other opaque geometry would be. A flattened
+  // ellipsoid (non-uniform scale, applied per-call in setHeadOccluder),
+  // not a plain sphere.
+  const occluder = new THREE.Mesh(
+    new THREE.SphereGeometry(0.5, 24, 16),
+    new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true }),
+  );
+  occluder.visible = false;
+  scene.add(occluder);
 
   const gltf = await new GLTFLoader().loadAsync(url);
   const template = gltf.scene;
@@ -172,6 +196,25 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
         group.rotation.z = -(t.rotationZ ?? 0);
       });
     },
+    setHeadOccluder(transform) {
+      if (!transform) {
+        occluder.visible = false;
+        return;
+      }
+      occluder.visible = true;
+      // A real head's width is roughly the same as temple-to-temple glasses
+      // width, so `size` doubles as head diameter here — radius = size/2.
+      const radius = transform.size * 0.5;
+      // Head center sits about one radius behind the glasses' own z=0
+      // plane (glasses rest on the front of the head, not at its center).
+      occluder.position.set(transform.x - width / 2, -(transform.y - height / 2), -radius);
+      occluder.rotation.x = transform.rotationX ?? 0;
+      occluder.rotation.y = transform.rotationY ?? 0;
+      occluder.rotation.z = -(transform.rotationZ ?? 0);
+      // Flattened front-to-back (Z) relative to width/height (X/Y) — an
+      // actual head silhouette, not a sphere.
+      occluder.scale.set(transform.size, transform.size, transform.size * 0.65);
+    },
     resize(w, h) {
       width = Math.max(1, w);
       height = Math.max(1, h);
@@ -188,6 +231,8 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
     dispose() {
       instances.forEach((g) => scene.remove(g));
       materials.forEach((m) => m.dispose());
+      occluder.geometry.dispose();
+      (occluder.material as import('three').Material).dispose();
       envTexture.dispose();
       renderer.dispose();
     },
