@@ -5,6 +5,7 @@ import {
   drawHandPlacement,
   getFacePlacementFrames,
   getHandPlacementFrame,
+  type BodyAnchors,
   type FaceAnchors,
   type FacePlacement,
   type HandAnchors,
@@ -14,8 +15,10 @@ import {
 import { loadModelViewer, type ModelViewerHandle } from '../lib/modelViewer';
 import { getReadyFaceLandmarker, loadFaceLandmarker } from './useFaceLandmarker';
 import { getReadyHandLandmarker, loadHandModel } from './useHandModel';
+import { getReadyPoseLandmarker, loadPoseLandmarker } from './usePoseLandmarker';
 import { OneEuroFilter, Point2DFilter } from '../lib/oneEuroFilter';
 import { matrixToEuler } from '../lib/headPose';
+import { Spring1D } from '../lib/spring';
 
 interface CustomModelOverlay {
   url: string;
@@ -55,6 +58,9 @@ interface UseTryOnResult {
 
 /** How long without a successful detection before surfacing a low-confidence hint instead of silently holding the last position forever. */
 const CONFIDENCE_TIMEOUT_MS = 1200;
+
+/** Yaw magnitude (radians) beyond which the far-side earring is dropped instead of rendering through the head — ~35°. Only applied to the 3D model overlay (see runFaceRenderLoop). */
+const FAR_EAR_YAW_CUTOFF = 0.61;
 
 /**
  * MediaPipe FaceLandmarker's canonical 478-point face mesh indices for the
@@ -135,6 +141,7 @@ export function useTryOn({
   const placementRef = useRef(placement);
   const faceAnchorsRef = useRef<FaceAnchors | null>(null);
   const handAnchorsRef = useRef<HandAnchors | null>(null);
+  const bodyAnchorsRef = useRef<{ shoulderA: Point; shoulderB: Point } | null>(null);
   const modelViewerRef = useRef<ModelViewerHandle | null>(null);
   const modelViewerSizeRef = useRef({ width: 0, height: 0 });
 
@@ -212,6 +219,7 @@ export function useTryOn({
     let detecting = false;
     faceAnchorsRef.current = null;
     handAnchorsRef.current = null;
+    bodyAnchorsRef.current = null;
     setDemoMode(false);
     setTrackingReady(false);
     setLowConfidence(false);
@@ -236,8 +244,18 @@ export function useTryOn({
       middleMcp: new Point2DFilter(),
       ringAnchor: new Point2DFilter(),
     };
+    const bodyFilters = {
+      shoulderA: new Point2DFilter(),
+      shoulderB: new Point2DFilter(),
+    };
     const headPosePitchFilter = new OneEuroFilter();
     const headPoseYawFilter = new OneEuroFilter();
+    // Spring-smoothed torso tilt for the necklace's "drape" — settles
+    // toward the real shoulder-line angle instead of snapping to it, a
+    // lite approximation of "the pendant catches up as the body moves"
+    // (see lib/spring.ts; not a full physics simulation).
+    const necklaceDrapeSpring = new Spring1D(0);
+    let lastNecklaceSpringMs = performance.now();
     // Smoothed head pose driving the 3D model overlay's extra tilt (on top
     // of the user's static orientation correction) — stays at zero in demo
     // mode / before the first real detection, since no matrix exists yet.
@@ -248,6 +266,11 @@ export function useTryOn({
     // chance to run once.
     let lastFaceDetectionMs = performance.now();
     let lastHandDetectionMs = performance.now();
+    // Pose tracking only ever starts for necklace placement (see
+    // runFaceRenderLoop) — eyewear/earring/hand sessions never pay its
+    // model-load or per-frame inference cost.
+    let poseDetecting = false;
+    let poseLoadStarted = false;
 
     const detectFaceOnce = async () => {
       const video = videoRef.current;
@@ -307,26 +330,62 @@ export function useTryOn({
       }
     };
 
-    const renderModelOverlay = (canvas: HTMLCanvasElement, frames: { x: number; y: number; size: number; rotation: number }[]) => {
+    // Only invoked for necklace placement (see runFaceRenderLoop) — gives
+    // real shoulder positions instead of the face-mesh-only estimate every
+    // other placement still uses. BlazePose landmarks 11/12 (left/right
+    // shoulder) — verified against real detector output on a static photo,
+    // and already land in the same "A = visual-left post-mirror" order
+    // FaceAnchors' eye pair uses, no index swap needed (unlike the eyes).
+    const detectPoseOnce = async () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const landmarker = getReadyPoseLandmarker();
+      if (!video || !canvas || !landmarker || !video.videoWidth) return;
+      try {
+        const now = performance.now();
+        const result = landmarker.detectForVideo(video, now);
+        const lm = result.landmarks[0];
+        if (cancelled || !lm) return;
+        bodyAnchorsRef.current = {
+          shoulderA: bodyFilters.shoulderA.filter(toCanvasPoint(lm[11], canvas), now),
+          shoulderB: bodyFilters.shoulderB.filter(toCanvasPoint(lm[12], canvas), now),
+        };
+      } catch {
+        // transient detection failure; keep the last known anchor
+      }
+    };
+
+    const renderModelOverlay = (
+      canvas: HTMLCanvasElement,
+      frames: { x: number; y: number; size: number; rotation: number }[],
+      // Only true for real-tracking eyewear — see runFaceRenderLoop. Every
+      // other call site (hand, demo modes, non-eyewear placements) leaves
+      // this false, which explicitly clears any occluder left over from a
+      // previous frame/placement rather than letting it linger.
+      applyHeadOccluder = false,
+    ) => {
       const handle = modelViewerRef.current;
       if (!handle) return;
       if (modelViewerSizeRef.current.width !== canvas.width || modelViewerSizeRef.current.height !== canvas.height) {
         handle.resize(canvas.width, canvas.height);
         modelViewerSizeRef.current = { width: canvas.width, height: canvas.height };
       }
+      // User's static per-upload correction, plus (for real tracking only —
+      // stays zero in demo mode) the live detected head pose, so the model
+      // tilts as the head turns/nods rather than only rolling.
+      const rotationY = customModelRotationRef.current + headPose.yaw;
+      const rotationX = customModelRotationXRef.current + headPose.pitch;
       handle.setInstances(
         frames.map((f) => ({
           x: f.x,
           y: f.y,
           size: f.size,
           rotationZ: f.rotation,
-          // User's static per-upload correction, plus (for real tracking
-          // only — stays zero in demo mode) the live detected head pose, so
-          // the model tilts as the head turns/nods rather than only rolling.
-          rotationY: customModelRotationRef.current + headPose.yaw,
-          rotationX: customModelRotationXRef.current + headPose.pitch,
+          rotationY,
+          rotationX,
         })),
       );
+      handle.setHeadOccluder(applyHeadOccluder && frames[0] ? { ...frames[0], rotationY, rotationX } : null);
       handle.render();
     };
 
@@ -372,17 +431,54 @@ export function useTryOn({
         canvas.height = video.clientHeight;
         const anchors = faceAnchorsRef.current ?? defaultFaceAnchors(canvas);
 
+        // Pose tracking is opt-in, necklace-only — lazily started the first
+        // time this session actually needs it, so every other placement
+        // never pays its model-load or per-frame cost.
+        let bodyAnchors: BodyAnchors | null = null;
+        if (placementRef.current === 'neck') {
+          if (!poseLoadStarted) {
+            poseLoadStarted = true;
+            loadPoseLandmarker();
+          }
+          const raw = bodyAnchorsRef.current;
+          if (raw) {
+            const now = performance.now();
+            const dt = (now - lastNecklaceSpringMs) / 1000;
+            lastNecklaceSpringMs = now;
+            const rawTorsoAngle = Math.atan2(raw.shoulderB.y - raw.shoulderA.y, raw.shoulderB.x - raw.shoulderA.x);
+            bodyAnchors = {
+              shoulderA: raw.shoulderA,
+              shoulderB: raw.shoulderB,
+              drapeRotation: necklaceDrapeSpring.update(rawTorsoAngle, dt),
+            };
+          }
+          if (!poseDetecting) {
+            poseDetecting = true;
+            detectPoseOnce().finally(() => {
+              poseDetecting = false;
+            });
+          }
+        }
+
         if (modelViewerRef.current && modelCanvasRef.current) {
           const modelCanvas = modelCanvasRef.current;
           modelCanvas.width = canvas.width;
           modelCanvas.height = canvas.height;
-          const frames = getFacePlacementFrames(placementRef.current as FacePlacement, anchors, sizeRef.current);
-          renderModelOverlay(modelCanvas, frames);
+          let frames = getFacePlacementFrames(placementRef.current as FacePlacement, anchors, sizeRef.current, bodyAnchors);
+          // Far-side earring cutoff at extreme yaw — reuses the same
+          // (best-effort, documented in lib/headPose.ts) signed yaw value
+          // the model's own tilt already uses, so if that sign ever needs
+          // flipping on a real device, this stays consistent with it
+          // rather than being a second, independently-wrong guess.
+          if (placementRef.current === 'ears' && frames.length === 2 && Math.abs(headPose.yaw) > FAR_EAR_YAW_CUTOFF) {
+            frames = [headPose.yaw > 0 ? frames[1] : frames[0]];
+          }
+          renderModelOverlay(modelCanvas, frames, placementRef.current === 'eyes');
         } else {
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawFacePlacement(ctx, placementRef.current as FacePlacement, anchors, sizeRef.current, colorRef.current);
+            drawFacePlacement(ctx, placementRef.current as FacePlacement, anchors, sizeRef.current, colorRef.current, bodyAnchors);
           }
         }
 

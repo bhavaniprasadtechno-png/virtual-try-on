@@ -14,7 +14,7 @@ category/product system and hand tracking.
 ## Stack
 
 - React 18 + TypeScript, built with Vite
-- [@mediapipe/tasks-vision](https://github.com/google-ai-edge/mediapipe) — FaceLandmarker (478-point face mesh, incl. iris) for face tracking (eyewear, necklaces, earrings), HandLandmarker for hand tracking (rings, bracelets)
+- [@mediapipe/tasks-vision](https://github.com/google-ai-edge/mediapipe) — FaceLandmarker (478-point face mesh, incl. iris) for face tracking (eyewear, necklaces, earrings), HandLandmarker for hand tracking (rings, bracelets), PoseLandmarker (shoulder landmarks only, started lazily for necklace placement) for real shoulder-width/torso-tilt necklace fit
 - Both models' weights **and** the MediaPipe wasm runtime are **self-hosted** under `public/` rather than fetched from a public CDN at runtime, and the library is loaded via dynamic `import()` so its (sizeable) bundle only downloads once Try-On mode actually needs it
 - No UI framework dependency — plain CSS using design tokens (`src/styles/tokens.css`) lifted from the handoff's design system
 
@@ -70,6 +70,8 @@ src/
                           weights
     useHandModel.ts       lazy-loaded MediaPipe HandLandmarker + self-hosted
                           wasm runtime and model
+    usePoseLandmarker.ts  lazy-loaded MediaPipe PoseLandmarker; only started
+                          for necklace placement (see useTryOn.ts)
   lib/
     drawGlasses.ts        canvas drawing routine — eyewear
     drawJewellery.ts      canvas drawing routines — necklace/earring/ring/bracelet
@@ -78,6 +80,7 @@ src/
     products.ts           product catalog (category, tracking target, placement, colors)
 public/
   models/                 self-hosted face_landmarker.task + hand_landmarker.task
+                          + pose_landmarker_lite.task
   mediapipe/wasm/         self-hosted MediaPipe vision wasm runtime
 ```
 
