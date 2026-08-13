@@ -5,16 +5,17 @@
  * angle. Only used for the WebGL model overlay — the 2D line-art path can't
  * meaningfully represent out-of-plane rotation and is untouched.
  *
- * IMPORTANT — best-effort sign convention: MediaPipe's matrix is defined in
- * its own canonical face-model coordinate frame, which this app has no live
- * camera to verify against (this environment is sandboxed, no webcam). The
- * matrix decomposition itself is verified correct (cross-checked by hand
- * against a real detected frontal photo — see project history), but whether
- * yaw/pitch need negating to match this app's mirrored-video convention is
- * unverified until tested on a real device. If the model turns the wrong
- * way as you turn your head, flip the matching constant below.
+ * Sign convention: MediaPipe's matrix is defined in its own canonical
+ * face-model coordinate frame, which doesn't match this app's mirrored-video
+ * convention directly. The matrix decomposition itself is verified correct
+ * (cross-checked by hand against a real detected frontal photo — see project
+ * history). Yaw needed negating relative to the raw decomposition — confirmed
+ * on a real device, where the un-negated sign made the model turn opposite
+ * the user's actual head movement (mirrored video: turning your head to your
+ * own right should turn the model the same way the mirror shows your face
+ * turning). Pitch matched real-device behavior as-is.
  */
-export const HEAD_POSE_YAW_SIGN = 1;
+export const HEAD_POSE_YAW_SIGN = -1;
 export const HEAD_POSE_PITCH_SIGN = 1;
 
 export interface HeadPoseEuler {
