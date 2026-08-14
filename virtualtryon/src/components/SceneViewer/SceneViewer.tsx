@@ -133,7 +133,9 @@ export function SceneViewer() {
         rotationOffsetY: customModel.rotationOffsetY,
         rotationOffsetX: customModel.rotationOffsetX,
       }
-    : null;
+    : product.modelUrl
+      ? { url: product.modelUrl, tintHex: colorHex, rotationOffsetY: 0, rotationOffsetX: 0 }
+      : null;
   // Neutral fallback so the 2D line-art renderer has a color even if a custom
   // model fails to load and its tint is "Original" (no fixed color).
   const tryOnColorHex = customModel ? MODEL_TINTS[customModel.tintIndex]?.hex ?? '#9d9fae' : colorHex;

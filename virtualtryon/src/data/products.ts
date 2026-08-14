@@ -23,6 +23,8 @@ export interface Product {
   trackingTarget: TrackingTarget;
   placement: Placement;
   colors: ProductColor[];
+  /** Catalog-provided glTF/GLB asset, rendered through the same WebGL viewer as a user upload — undefined falls back to the flat line-art overlay. */
+  modelUrl?: string;
 }
 
 export const PRODUCTS: Product[] = [
@@ -35,6 +37,7 @@ export const PRODUCTS: Product[] = [
     priceLabel: 'INR 1799.00',
     trackingTarget: 'face',
     placement: 'eyes',
+    modelUrl: '/models/chamberlain-aviator.glb',
     colors: [
       { name: 'Brown Mix', hex: '#7a4a1f', swatch: 'linear-gradient(135deg,#c98a3f,#3a2412)' },
       { name: 'Forest Green', hex: '#1f5c3d', swatch: 'linear-gradient(135deg,#2e8f5f,#0c2418)' },

@@ -24,6 +24,14 @@ export function PreviewPane({ product, colorHex, customModel, onSelectTryOn }: P
             rotationOffsetX={customModel.rotationOffsetX}
             className="preview-pane__frame"
           />
+        ) : product.modelUrl ? (
+          <Model3DPreview
+            url={product.modelUrl}
+            tintHex={colorHex}
+            rotationOffsetY={0}
+            rotationOffsetX={0}
+            className="preview-pane__frame"
+          />
         ) : (
           <ProductPreviewArt product={product} colorHex={colorHex} className="preview-pane__frame" />
         )}
