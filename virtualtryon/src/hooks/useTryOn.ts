@@ -358,11 +358,13 @@ export function useTryOn({
     const renderModelOverlay = (
       canvas: HTMLCanvasElement,
       frames: { x: number; y: number; size: number; rotation: number }[],
-      // Only true for real-tracking eyewear — see runFaceRenderLoop. Every
-      // other call site (hand, demo modes, non-eyewear placements) leaves
-      // this false, which explicitly clears any occluder left over from a
-      // previous frame/placement rather than letting it linger.
+      // Only true for real-tracking eyewear/necklace respectively — see
+      // runFaceRenderLoop. Every other call site (hand, demo modes, other
+      // placements) leaves both false, which explicitly clears any occluder
+      // left over from a previous frame/placement rather than letting it
+      // linger.
       applyHeadOccluder = false,
+      applyNeckOccluder = false,
     ) => {
       const handle = modelViewerRef.current;
       if (!handle) return;
@@ -385,7 +387,9 @@ export function useTryOn({
           rotationX,
         })),
       );
-      handle.setHeadOccluder(applyHeadOccluder && frames[0] ? { ...frames[0], rotationY, rotationX } : null);
+      const occluderTransform = frames[0] ? { ...frames[0], rotationY, rotationX } : null;
+      handle.setHeadOccluder(applyHeadOccluder ? occluderTransform : null);
+      handle.setNeckOccluder(applyNeckOccluder ? occluderTransform : null);
       handle.render();
     };
 
@@ -473,7 +477,12 @@ export function useTryOn({
           if (placementRef.current === 'ears' && frames.length === 2 && Math.abs(headPose.yaw) > FAR_EAR_YAW_CUTOFF) {
             frames = [headPose.yaw > 0 ? frames[1] : frames[0]];
           }
-          renderModelOverlay(modelCanvas, frames, placementRef.current === 'eyes');
+          renderModelOverlay(
+            modelCanvas,
+            frames,
+            placementRef.current === 'eyes',
+            placementRef.current === 'neck',
+          );
         } else {
           const ctx = canvas.getContext('2d');
           if (ctx) {

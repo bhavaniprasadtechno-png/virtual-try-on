@@ -1,6 +1,9 @@
 import { SIZES, type ProductColor } from '../../data/products';
 import './TryOnControls.css';
 
+/** Fine pitch increment for the tilt buttons — small enough to dial in by eye, unlike Rotate's 90° jumps or Flip's fixed 180°. */
+const TILT_STEP_RADIANS = Math.PI / 18; // 10°
+
 interface TryOnControlsProps {
   colors: ProductColor[];
   colorIndex: number;
@@ -11,6 +14,8 @@ interface TryOnControlsProps {
   /** Present only when a custom uploaded model is active — lets orientation be dialed in while watching it live instead of bouncing back to Preview. */
   onRotateModel?: (deltaRadians: number) => void;
   onFlipModel?: () => void;
+  /** Fine pitch nudge — e.g. tilting a necklace back to hug the neck/chest curve instead of standing flat. */
+  onTiltModel?: (deltaRadians: number) => void;
 }
 
 /**
@@ -28,6 +33,7 @@ export function TryOnControls({
   onClose,
   onRotateModel,
   onFlipModel,
+  onTiltModel,
 }: TryOnControlsProps) {
   return (
     <div className="tryon-controls">
@@ -91,6 +97,26 @@ export function TryOnControls({
             >
               <FlipIcon />
             </button>
+            {onTiltModel && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-icon tryon-controls__orient"
+                  aria-label="Tilt model back"
+                  onClick={() => onTiltModel(TILT_STEP_RADIANS)}
+                >
+                  <TiltBackIcon />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-icon tryon-controls__orient"
+                  aria-label="Tilt model forward"
+                  onClick={() => onTiltModel(-TILT_STEP_RADIANS)}
+                >
+                  <TiltForwardIcon />
+                </button>
+              </>
+            )}
           </div>
         </>
       )}
@@ -137,6 +163,22 @@ function FlipIcon() {
   return (
     <span className="tryon-controls__orient-icon" aria-hidden="true">
       ⇅
+    </span>
+  );
+}
+
+function TiltBackIcon() {
+  return (
+    <span className="tryon-controls__orient-icon" aria-hidden="true">
+      ⌃
+    </span>
+  );
+}
+
+function TiltForwardIcon() {
+  return (
+    <span className="tryon-controls__orient-icon" aria-hidden="true">
+      ⌄
     </span>
   );
 }

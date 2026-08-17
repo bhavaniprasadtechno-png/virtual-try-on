@@ -34,6 +34,18 @@ export interface ModelViewerHandle {
    * at extreme angles.
    */
   setHeadOccluder(transform: InstanceTransform | null): void;
+  /**
+   * Same idea for necklace placement: an invisible depth-only vertical
+   * cylinder standing in for the neck, positioned behind the necklace, so
+   * the back arc of the loop — which a real neck would hide from a
+   * front-facing camera — drops out via the normal depth test instead of
+   * rendering through where the neck should be. Without this, an uploaded
+   * necklace model's full closed loop is visible, which reads as a flat
+   * medallion floating in front of the neck rather than wrapped around it.
+   * Pass null to disable. Approximate/lite, same spirit as the head
+   * occluder above.
+   */
+  setNeckOccluder(transform: InstanceTransform | null): void;
   resize(width: number, height: number): void;
   render(): void;
   dispose(): void;
@@ -84,6 +96,16 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
   );
   occluder.visible = false;
   scene.add(occluder);
+
+  // Same depth-only trick, shaped as a vertical cylinder standing in for
+  // the neck rather than a flattened sphere standing in for the head — see
+  // setNeckOccluder below.
+  const neckOccluder = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 0.5, 1, 20),
+    new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true }),
+  );
+  neckOccluder.visible = false;
+  scene.add(neckOccluder);
 
   const gltf = await new GLTFLoader().loadAsync(url);
   const template = gltf.scene;
@@ -215,6 +237,36 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
       // actual head silhouette, not a sphere.
       occluder.scale.set(transform.size, transform.size, transform.size * 0.65);
     },
+    setNeckOccluder(transform) {
+      if (!transform) {
+        neckOccluder.visible = false;
+        return;
+      }
+      neckOccluder.visible = true;
+      // A neck is narrower than the necklace resting on it, and rises
+      // above the necklace's own anchor point (which sits below the chin,
+      // roughly at collarbone height — see overlay.ts's 'neck' case) — so
+      // the cylinder centers above that anchor rather than on it. Only
+      // matters for necklace geometry that actually has something to hide
+      // behind a neck — a full chain loop or a pendant that swings back —
+      // a closed, front-facing collar/plate shape is already self-occluding
+      // via ordinary opaque depth testing and this is a no-op for it.
+      const radius = transform.size * 0.42;
+      const cylinderHeight = transform.size * 1.6;
+      // Cylinder axis (world Y) sits behind the necklace's own z=0 plane by
+      // one radius, same reasoning as the head occluder: the front surface
+      // ends up roughly where the necklace rests against the neck, not
+      // behind it entirely.
+      neckOccluder.position.set(
+        transform.x - width / 2,
+        -(transform.y - height / 2) + cylinderHeight * 0.22,
+        -radius,
+      );
+      neckOccluder.rotation.x = transform.rotationX ?? 0;
+      neckOccluder.rotation.y = transform.rotationY ?? 0;
+      neckOccluder.rotation.z = -(transform.rotationZ ?? 0);
+      neckOccluder.scale.set(radius * 2, cylinderHeight, radius * 2);
+    },
     resize(w, h) {
       width = Math.max(1, w);
       height = Math.max(1, h);
@@ -233,6 +285,8 @@ export async function loadModelViewer(canvas: HTMLCanvasElement, url: string): P
       materials.forEach((m) => m.dispose());
       occluder.geometry.dispose();
       (occluder.material as import('three').Material).dispose();
+      neckOccluder.geometry.dispose();
+      (neckOccluder.material as import('three').Material).dispose();
       envTexture.dispose();
       renderer.dispose();
     },
