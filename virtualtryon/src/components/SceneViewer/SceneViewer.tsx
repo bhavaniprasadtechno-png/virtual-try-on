@@ -106,6 +106,12 @@ export function SceneViewer() {
   const handleFlipModel = () =>
     setCustomModel((m) => (m ? { ...m, rotationOffsetX: m.rotationOffsetX + Math.PI } : m));
 
+  // Fine pitch nudge, distinct from Flip's fixed 180° — lets a necklace (or
+  // any upload) be angled to hug the body's curve instead of standing
+  // perfectly flat, in increments small enough to dial in by eye.
+  const handleTiltModel = (deltaRadians: number) =>
+    setCustomModel((m) => (m ? { ...m, rotationOffsetX: m.rotationOffsetX + deltaRadians } : m));
+
   // Persists target/placement/tint/rotation together, once React has
   // resolved to the final state — avoids the same stale-value hazard that
   // calling saveStoredModelMeta directly in each handler above would have.
@@ -182,6 +188,7 @@ export function SceneViewer() {
               onClose={() => setIsPreview(true)}
               onRotateModel={customModel ? handleRotateModel : undefined}
               onFlipModel={customModel ? handleFlipModel : undefined}
+              onTiltModel={customModel ? handleTiltModel : undefined}
             />
           </>
         )}
@@ -206,6 +213,7 @@ export function SceneViewer() {
           onChangeModelTint={handleChangeModelTint}
           onRotateModel={handleRotateModel}
           onFlipModel={handleFlipModel}
+          onTiltModel={handleTiltModel}
         />
       )}
     </div>

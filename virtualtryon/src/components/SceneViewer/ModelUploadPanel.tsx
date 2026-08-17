@@ -12,6 +12,9 @@ import {
 } from '../../data/customModel';
 import './ModelUploadPanel.css';
 
+/** Fine pitch increment for the tilt buttons — small enough to dial in by eye, unlike Rotate's 90° jumps or Flip's fixed 180°. */
+const TILT_STEP_RADIANS = Math.PI / 18; // 10°
+
 interface ModelUploadPanelProps {
   customModel: CustomModel | null;
   onUpload: (model: CustomModel, file: File) => void;
@@ -21,6 +24,7 @@ interface ModelUploadPanelProps {
   onChangeTint: (tintIndex: number) => void;
   onRotate: (deltaRadians: number) => void;
   onFlip: () => void;
+  onTilt: (deltaRadians: number) => void;
 }
 
 /** Upload-your-own-model section of the Customize panel: file picker, tracking target/placement, and tint. */
@@ -33,6 +37,7 @@ export function ModelUploadPanel({
   onChangeTint,
   onRotate,
   onFlip,
+  onTilt,
 }: ModelUploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -194,6 +199,34 @@ export function ModelUploadPanel({
             </div>
           </div>
 
+          <div className="model-upload__field">
+            <span className="model-upload__field-label">Doesn&apos;t hug the body?</span>
+            <p className="model-upload__hint">
+              For a necklace especially, a small backward tilt sells it resting on a curved neck/chest instead of
+              floating flat in front — nudge it until it wraps convincingly.
+            </p>
+            <div className="model-upload__rotate-row">
+              <button
+                type="button"
+                className="btn model-upload__rotate"
+                aria-label="Tilt model back"
+                onClick={() => onTilt(TILT_STEP_RADIANS)}
+              >
+                <TiltBackIcon />
+                Tilt back
+              </button>
+              <button
+                type="button"
+                className="btn model-upload__rotate"
+                aria-label="Tilt model forward"
+                onClick={() => onTilt(-TILT_STEP_RADIANS)}
+              >
+                <TiltForwardIcon />
+                Tilt forward
+              </button>
+            </div>
+          </div>
+
           <button type="button" className="btn model-upload__replace" onClick={() => inputRef.current?.click()}>
             Replace model
           </button>
@@ -249,6 +282,22 @@ function FlipIcon() {
   return (
     <span className="model-upload__rotate-icon" aria-hidden="true">
       ⇅
+    </span>
+  );
+}
+
+function TiltBackIcon() {
+  return (
+    <span className="model-upload__rotate-icon" aria-hidden="true">
+      ⌃
+    </span>
+  );
+}
+
+function TiltForwardIcon() {
+  return (
+    <span className="model-upload__rotate-icon" aria-hidden="true">
+      ⌄
     </span>
   );
 }
